@@ -1,4 +1,5 @@
 import SimController from "@/components/SimController";
+import AirportMap from "@/components/AirportMap";
 
 export default function Home() {
     return (
@@ -9,6 +10,7 @@ export default function Home() {
                     <p className="text-muted-foreground">Monitor and control the simulation environment.</p>
                 </div>
 
+                <AirportMap />
                 <SimController />
             </div>
         </main>

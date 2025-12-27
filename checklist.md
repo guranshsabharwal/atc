@@ -147,24 +147,24 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 - [x] Load PMTiles in MapLibre using the pmtiles protocol plugin -> Loaded GeoJSON in MapLibre.
 
 **Deliverables**
-- [ ] `data/derived/khef/airport.base.json`
-- [ ] `data/derived/khef/ground.graph.json`
-- [ ] `data/raw/osm/khef.geojson`
-- [ ] `data/raw/osm/khef.overpassql`
-- [ ] `khef.pmtiles` (optional but recommended)
+- [x] `data/derived/khef/airport.base.json`
+- [x] `data/derived/khef/ground.graph.json` (saved as `graph.json`)
+- [x] `data/raw/osm/khef.geojson`
+- [x] `data/raw/osm/khef.overpassql`
+- [x] `khef.pmtiles` (Skipped - using direct GeoJSON API)
 
 ---
 
 # Phase 3 — Map rendering MVP (Ground scope) (2–4 days)
 
 ## 3.1 Ground scope UI
-- [ ] Add MapLibre map view:
-  - [ ] Load basemap via PMTiles (or public tiles while prototyping)
-- [ ] Render airport overlays from your derived GeoJSON:
-  - [ ] Runways/taxiways/aprons (as vector layers)
-  - [ ] Labels (ref/name)
-- [ ] Render ground graph debug overlays (toggle):
-  - [ ] nodes + edges
+- [x] Add MapLibre map view:
+  - [x] Load basemap via PMTiles (or public tiles while prototyping)
+- [x] Render airport overlays from your derived GeoJSON:
+  - [x] Runways/taxiways/aprons (as vector layers)
+  - [x] Labels (ref/name)
+- [x] Render ground graph debug overlays (toggle):
+  - [x] nodes + edges
 
 ## 3.2 Aircraft targets (static first)
 - [ ] Implement `AircraftTargetLayer` using deck.gl:

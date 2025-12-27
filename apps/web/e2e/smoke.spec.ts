@@ -22,4 +22,7 @@ test('shows connected status', async ({ page }) => {
     // Let's stick to title for now to be safe, or assert "System Status" exists.
 
     await expect(page.getByText('System Status')).toBeVisible();
+
+    // Verify Map is present
+    await expect(page.locator('.maplibregl-map')).toBeVisible();
 });
