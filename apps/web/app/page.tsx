@@ -8,9 +8,15 @@ export default function Home() {
     const { isConnected, worldState, sendCommand } = useSimulation();
 
     const handleSpawn = (callsign: string) => {
+        // Randomize start pos slightly to hit different graph nodes
+        // KHEF Center approx 38.7214, -77.5154
+        // Delta approx 0.005 deg (~500m)
+        const lat = 38.7214 + (Math.random() - 0.5) * 0.01;
+        const lon = -77.5154 + (Math.random() - 0.5) * 0.01;
+
         sendCommand("spawnAircraft", {
             callsign,
-            startPosition: { lat: 38.7214, lon: -77.5154, alt: 300, heading: 90 }, // Near KHEF center
+            startPosition: { lat, lon, alt: 300, heading: 90 },
         });
     };
 

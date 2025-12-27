@@ -130,6 +130,15 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                 paint: { 'line-color': 'blue', 'line-width': 1, 'line-opacity': 0.5 }
             });
 
+            // Aircraft Paths Source
+            map.current?.addSource('aircraft-paths', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: []
+                }
+            });
+
             // Aircraft Layer
             map.current?.addLayer({
                 id: 'aircraft-layer',
@@ -143,6 +152,24 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                 }
             });
 
+            // Aircraft Path Layer (Magenta line)
+            map.current?.addLayer({
+                id: 'aircraft-path-layer',
+                type: 'line',
+                source: 'aircraft-paths',
+                layout: {
+                    'line-join': 'round',
+                    'line-cap': 'round',
+                    visibility: 'visible'
+                },
+                paint: {
+                    'line-color': '#ff00ff', // Magenta
+                    'line-width': 3,
+                    'line-opacity': 0.7,
+                    'line-dasharray': [2, 1] // Dashed
+                }
+            });
+
             // Add Label for Aircraft
             map.current?.addLayer({
                 id: 'aircraft-label-layer',
@@ -153,7 +180,9 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                     'text-size': 12,
                     'text-offset': [0, -1.5],
                     'text-anchor': 'bottom',
-                    'text-font': ['Open Sans Bold'] // Will fallback to defaults if not available
+                    'text-font': ['Open Sans Bold'],
+                    'text-allow-overlap': true,
+                    'text-ignore-placement': true
                 },
                 paint: {
                     'text-color': '#000',
@@ -192,10 +221,39 @@ export default function AirportMap({ worldState }: AirportMapProps) {
         });
     }, []);
 
-    // Update Aircraft Positions
+    const [graphData, setGraphData] = useState<any>(null);
+
+    // Fetch Graph Data for Path Reconstruction
+    useEffect(() => {
+        fetch('/api/geo/graph')
+            .then(res => res.json())
+            .then(data => {
+                // Index nodes for quick lookup
+                const nodes: Record<string, [number, number]> = {};
+
+                // The graph_debug.geojson contains LineStrings for edges.
+                // Each feature has properties: { from: string, to: string, ... }
+                // and geometry: { coordinates: [[lon1, lat1], [lon2, lat2]] }
+                data.features.forEach((f: any) => {
+                    if (f.geometry.type === 'LineString' && f.properties.from && f.properties.to) {
+                        const coords = f.geometry.coordinates;
+                        if (coords.length >= 2) {
+                            nodes[f.properties.from] = coords[0] as [number, number];
+                            nodes[f.properties.to] = coords[coords.length - 1] as [number, number];
+                        }
+                    }
+                });
+                console.log(`[AirportMap] Loaded ${Object.keys(nodes).length} nodes for path rendering`);
+                setGraphData(nodes);
+            })
+            .catch(err => console.error("Failed to load graph data for paths:", err));
+    }, []);
+
+    // Update Aircraft Positions & Paths
     useEffect(() => {
         if (!map.current || !loaded || !worldState) return;
 
+        // Update Aircraft Points
         const source = map.current.getSource('aircraft-source') as maplibregl.GeoJSONSource;
         if (source) {
             const features = (worldState.aircraft || []).map(ac => ({
@@ -216,7 +274,45 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                 features: features as any
             });
         }
-    }, [worldState, loaded]);
+
+        // Update Aircraft Paths (Trails)
+        const pathSource = map.current.getSource('aircraft-paths') as maplibregl.GeoJSONSource;
+        if (pathSource && graphData) {
+            const pathFeatures = (worldState.aircraft || [])
+                .filter(ac => ac.route && ac.route.length > 1) // Only show if valid route
+                .map(ac => {
+                    const coords = ac.route!
+                        .map(nodeId => graphData[nodeId])
+                        .filter(c => c !== undefined); // valid coords only
+
+                    if (coords.length < 2) return null;
+
+                    return {
+                        type: 'Feature',
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: coords
+                        },
+                        properties: {
+                            callsign: ac.callsign
+                        }
+                    };
+                })
+                .filter(Boolean); // remove nulls
+
+            if (pathFeatures.length > 0) {
+                pathSource.setData({
+                    type: 'FeatureCollection',
+                    features: pathFeatures as any
+                });
+            } else {
+                pathSource.setData({
+                    type: 'FeatureCollection',
+                    features: []
+                });
+            }
+        }
+    }, [worldState, loaded, graphData]);
 
 
     // Effect to handle toggles

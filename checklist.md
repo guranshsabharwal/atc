@@ -196,18 +196,18 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
   - [x] Snapshot on connect + deltas thereafter (Currently using full snapshots for MVP simplicity)
 
 ## 4.3 Taxi movement model
-- [ ] Pathfinding over `ground.graph.json`:
-  - [ ] A* (recommended) or Dijkstra
-- [ ] Movement along route:
-  - [ ] Speed profiles, stop at hold short, wait states
-- [ ] Ground conflict primitives:
-  - [ ] Node/edge occupancy
-  - [ ] Hold-short compliance tracking
+- [x] Pathfinding over `ground.graph.json`:
+  - [x] A* (recommended) or Dijkstra
+- [x] Movement along route:
+  - [x] Speed profiles, stop at hold short, wait states
+- [x] Ground conflict primitives:
+  - [x] Node/edge occupancy
+  - [x] Hold-short compliance tracking (Moved to Phase 8.2 Validator)
 
 **Deliverables**
-- [ ] Spawn aircraft at parking
-- [ ] Issue taxi clearance
-- [ ] Aircraft follows route and stops at holds
+- [x] Spawn aircraft at parking
+- [x] Issue taxi clearance
+- [x] Aircraft follows route and stops at holds
 
 ---
 
@@ -317,6 +317,7 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 - [ ] Validate runway clearances:
   - [ ] runway clear
   - [ ] separation timer windows
+  - [ ] hold-short compliance
 - [ ] Validate air clearances:
   - [ ] min separation (simplified)
   - [ ] no vector into prohibited areas (if modeled)
