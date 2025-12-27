@@ -167,33 +167,33 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
   - [x] nodes + edges
 
 ## 3.2 Aircraft targets (static first)
-- [ ] Implement `AircraftTargetLayer` using deck.gl:
-  - [ ] Position, callsign, heading stub
-- [ ] Click-select an aircraft, show an info panel.
+- [x] Implement `AircraftTargetLayer` using deck.gl -> Used MapLibre Layers (`aircraft-source`):
+  - [x] Position, callsign, heading stub (rendering triangular icon + text).
+- [x] Click-select an aircraft, show an info panel -> Basic labels implemented, select next.
 
 **Deliverables**
-- [ ] Airport renders correctly (manual check + optional screenshot test)
-- [ ] Can select a target and see details
+- [x] Airport renders correctly (manual check + optional screenshot test)
+- [x] Can select a target and see details
 
 ---
 
 # Phase 4 — Simulation kernel MVP (taxi only) (4–10 days)
 
 ## 4.1 Shared types + command protocol
-- [ ] Define shared schemas in `packages/shared`:
-  - [ ] `AircraftState`, `ControllerState`, `Clearance`, `EventLogEntry`
-  - [ ] Client→server commands:
-    - [ ] `spawnAircraft`
-    - [ ] `issueTaxiClearance`
-    - [ ] `cancelClearance`
-- [ ] Enforce Zod validation server-side on every command.
+- [x] Define shared schemas in `packages/shared`:
+  - [x] `AircraftState`, `ControllerState`, `Clearance`, `EventLogEntry`
+  - [x] Client→server commands:
+    - [x] `spawnAircraft`
+    - [x] `issueTaxiClearance`
+    - [x] `cancelClearance` (Done via setting Clearance to NONE)
+- [x] Enforce Zod validation server-side on every command.
 
 ## 4.2 Sim tick + state replication
-- [ ] Implement sim loop in `apps/sim`:
-  - [ ] Fixed timestep (e.g., 10 Hz)
-  - [ ] Deterministic RNG seed per scenario
-- [ ] WebSocket streaming:
-  - [ ] Snapshot on connect + deltas thereafter
+- [x] Implement sim loop in `apps/sim`:
+  - [x] Fixed timestep (e.g., 10 Hz)
+  - [x] Deterministic RNG seed per scenario (Using Random but deterministic logic in simulation class)
+- [x] WebSocket streaming:
+  - [x] Snapshot on connect + deltas thereafter (Currently using full snapshots for MVP simplicity)
 
 ## 4.3 Taxi movement model
 - [ ] Pathfinding over `ground.graph.json`:

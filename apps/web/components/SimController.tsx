@@ -1,58 +1,22 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState } from "react";
 import { WorldState, Aircraft } from "@atc/shared";
 import { Button } from "@/components/ui/button";
 
-export default function SimController() {
-    const [socket, setSocket] = useState<WebSocket | null>(null);
-    const [connected, setConnected] = useState(false);
-    const [worldState, setWorldState] = useState<WorldState | null>(null);
+interface SimControllerProps {
+    connected: boolean;
+    worldState: WorldState | null;
+    onSpawn: (callsign: string) => void;
+    onTaxiTest?: (aircraftId: string) => void;
+}
+
+export default function SimController({ connected, worldState, onSpawn, onTaxiTest }: SimControllerProps) {
     const [callsign, setCallsign] = useState("UAL123");
 
-    useEffect(() => {
-        // Connect to WS
-        const ws = new WebSocket("ws://localhost:3002");
-
-        ws.onopen = () => {
-            console.log("Connected to Sim Server");
-            setConnected(true);
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === "state") {
-                    setWorldState(data.payload);
-                }
-            } catch (e) {
-                console.error("Parse error", e);
-            }
-        };
-
-        ws.onclose = () => {
-            console.log("Disconnected");
-            setConnected(false);
-        };
-
-        setSocket(ws);
-
-        return () => {
-            ws.close();
-        };
-    }, []);
-
-    const spawnAircraft = () => {
-        if (!socket) return;
-        const command = {
-            type: "spawnAircraft",
-            payload: {
-                callsign: callsign,
-                startPosition: { lat: 40.7128, lon: -74.0060, alt: 3000, heading: 90 },
-            },
-        };
-        socket.send(JSON.stringify(command));
-        // Randomize next callsign slightly
+    const handleSpawn = () => {
+        onSpawn(callsign);
+        // Randomize next callsign
         setCallsign(`UAL${Math.floor(Math.random() * 900) + 100}`);
     };
 
@@ -78,7 +42,7 @@ export default function SimController() {
                                 onChange={(e) => setCallsign(e.target.value)}
                             />
                         </div>
-                        <Button onClick={spawnAircraft} disabled={!connected}>
+                        <Button onClick={handleSpawn} disabled={!connected}>
                             Spawn Aircraft
                         </Button>
                     </div>
@@ -90,13 +54,16 @@ export default function SimController() {
                         Timestamp: {worldState?.timestamp || 0}
                     </div>
                     <div className="space-y-2">
-                        {worldState?.aircraft.length === 0 && <p className="text-sm">No aircraft in simulation.</p>}
-                        {worldState?.aircraft.map((ac: Aircraft) => (
+                        {(!worldState?.aircraft || worldState?.aircraft.length === 0) && <p className="text-sm">No aircraft in simulation.</p>}
+                        {worldState?.aircraft?.map((ac: Aircraft) => (
                             <div key={ac.id} className="flex justify-between items-center p-2 border rounded bg-muted/50">
                                 <span className="font-mono font-bold">{ac.callsign}</span>
                                 <span className="text-xs">
                                     {ac.position.lat.toFixed(4)}, {ac.position.lon.toFixed(4)} • {ac.position.alt}ft
                                 </span>
+                                <Button size="sm" variant="outline" onClick={() => onTaxiTest && onTaxiTest(ac.id)}>
+                                    Taxi Test
+                                </Button>
                             </div>
                         ))}
                     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { SpawnAircraftCommandSchema, WorldStateSchema } from './index';
+import { SpawnAircraftCommandSchema, WorldStateSchema, IssueTaxiClearanceCommandSchema } from './index';
 
 describe('Shared Schemas', () => {
     test('validates spawnAircraft command', () => {
@@ -21,10 +21,22 @@ describe('Shared Schemas', () => {
                     callsign: 'DAL456',
                     position: { lat: 33, lon: -84, alt: 5000, heading: 180 },
                     speed: 250,
+                    clearance: { type: 'NONE' }
                 }
             ],
             timestamp: Date.now()
         };
         expect(WorldStateSchema.safeParse(state).success).toBe(true);
+    });
+
+    test('validates issueTaxiClearance command', () => {
+        const cmd = {
+            type: 'issueTaxiClearance',
+            payload: {
+                aircraftId: '123',
+                destinationNodeId: 'node_456'
+            }
+        };
+        expect(IssueTaxiClearanceCommandSchema.safeParse(cmd).success).toBe(true);
     });
 });

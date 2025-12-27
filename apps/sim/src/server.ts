@@ -1,19 +1,16 @@
 import Fastify from 'fastify';
 import { WebSocketServer, WebSocket } from 'ws';
-import { WorldState, CommandSchema } from '@atc/shared';
-import { handleCommand } from './commands';
+import { CommandSchema } from '@atc/shared';
+import { Simulation } from './core/Simulation';
 
 const fastify = Fastify({ logger: true });
 
-// Initial World State
-let worldState: WorldState = {
-    aircraft: [],
-    timestamp: Date.now(),
-};
+// Instantiate Simulation
+const sim = new Simulation();
 
 // HTTP Route
 fastify.get('/', async (request, reply) => {
-    return { hello: 'world', aircraftCount: worldState.aircraft.length };
+    return { hello: 'world', aircraftCount: sim.getState().aircraft.length };
 });
 
 // Start Server
@@ -40,19 +37,18 @@ wss.on('connection', (ws) => {
     clients.add(ws);
 
     // Send initial state
-    ws.send(JSON.stringify({ type: 'state', payload: worldState }));
+    ws.send(JSON.stringify({ type: 'state', payload: sim.getState() }));
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message.toString());
+            // Wraps raw message in { type, payload } correctly
             const result = CommandSchema.safeParse(data);
 
             if (result.success) {
                 console.log('Received command:', result.data);
-                const newState = handleCommand(worldState, result.data);
-                worldState = newState;
-                // Broadcast new state
-                broadcastState();
+                sim.handleCommand(result.data);
+                // We don't broadcast immediately anymore; the tick loop handles it
             } else {
                 console.warn('Invalid command:', result.error);
             }
@@ -68,7 +64,7 @@ wss.on('connection', (ws) => {
 });
 
 function broadcastState() {
-    const message = JSON.stringify({ type: 'state', payload: worldState });
+    const message = JSON.stringify({ type: 'state', payload: sim.getState() });
     for (const client of clients) {
         if (client.readyState === WebSocket.OPEN) {
             client.send(message);
@@ -76,8 +72,10 @@ function broadcastState() {
     }
 }
 
-// Simple Tick Loop (updates timestamps for now)
+// Tick Loop (10 Hz = 100ms)
+const TICK_RATE = 100;
 setInterval(() => {
-    worldState = { ...worldState, timestamp: Date.now() };
+    // Delta time in seconds
+    sim.tick(TICK_RATE / 1000);
     broadcastState();
-}, 1000); // 1Hz for now
+}, TICK_RATE);
