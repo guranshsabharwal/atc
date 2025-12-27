@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SimulationRun {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  
+  // Minimal fields to start with
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+}

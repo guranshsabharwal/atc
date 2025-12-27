@@ -1,0 +1,9 @@
+{
+    "name": "@atc/geo",
+    "version": "0.0.0",
+    "main": "index.js",
+    "dependencies": {},
+    "devDependencies": {
+        "typescript": "^5.0.0"
+    }
+}
