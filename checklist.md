@@ -112,24 +112,24 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 > Goal: produce **versioned, auditable** data files you can render and simulate.
 
 ## 2.1 Airport metadata ingest (OurAirports)
-- [ ] Create `data/raw/ourairports/` and ingest:
-  - [ ] `airports.csv` / `runways.csv` / `navaids.csv` (as needed)
-- [ ] Write a Node ingest script:
-  - [ ] Parse OurAirports CSV → `data/derived/khef/airport.base.json`
-  - [ ] Validate with Zod schemas
-- [ ] Store provenance (source file + date + hash).
+- [x] Create `data/raw/ourairports/` and ingest:
+  - [x] `airports.csv` / `runways.csv` / `navaids.csv` (as needed)
+- [x] Write a Node ingest script:
+  - [x] Parse OurAirports CSV → `data/derived/khef/airport.base.json`
+  - [x] Validate with Zod schemas
+- [x] Store provenance (source file + date + hash).
 
 ## 2.2 OSM extraction for aeroways (layout)
-- [ ] Use Overpass Turbo to prototype queries for:
-  - [ ] `aeroway=runway`
-  - [ ] `aeroway=taxiway`
-  - [ ] `aeroway=apron`
-  - [ ] `aeroway=parking_position` (if available)
-- [ ] Bake a reproducible Overpass query into `data/raw/osm/khef.overpassql`.
-- [ ] Implement extractor script:
-  - [ ] Run Overpass query → GeoJSON in `data/raw/osm/khef.geojson`
-  - [ ] Normalize tags (names/refs)
-  - [ ] Validate geometry
+- [x] Use Overpass Turbo to prototype queries for:
+  - [x] `runway`, `taxiway`, `apron`, `parking_position` in KHEF bbox.
+- [x] Add scripts to pipeline:
+  - [x] Fetch Overpass API → `data/raw/osm/khef.geojson`.
+  - [x] Convert to GeoJSON (using `osmtogeojson`). (if available)
+- [x] Bake a reproducible Overpass query into `data/raw/osm/khef.overpassql`.
+- [x] Implement extractor script:
+  - [x] Run Overpass query → GeoJSON in `data/raw/osm/khef.geojson`
+  - [x] Normalize tags (names/refs)
+  - [x] Validate geometry
 
 ## 2.3 Build the **ground movement graph**
 - [ ] Convert taxiway lines + runway hold points → graph:

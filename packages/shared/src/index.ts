@@ -33,6 +33,7 @@ export const CommandSchema = z.discriminatedUnion('type', [
 ]);
 
 // TypeScript Types
+export * from './airport';
 export type Position = z.infer<typeof PositionSchema>;
 export type Aircraft = z.infer<typeof AircraftSchema>;
 export type WorldState = z.infer<typeof WorldStateSchema>;
