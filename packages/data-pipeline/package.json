@@ -4,10 +4,12 @@
     "main": "index.ts",
     "scripts": {
         "ingest": "tsx src/ingest-airport.ts",
-        "extract-osm": "tsx src/extract-osm.ts"
+        "extract-osm": "tsx src/extract-osm.ts",
+        "build-graph": "tsx src/build-graph.ts"
     },
     "dependencies": {
         "@atc/shared": "workspace:*",
+        "@turf/turf": "^7.3.1",
         "@types/osmtogeojson": "^2.2.34",
         "csv-parse": "^5.0.0",
         "fs-extra": "^11.0.0",

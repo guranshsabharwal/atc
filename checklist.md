@@ -132,19 +132,19 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
   - [x] Validate geometry
 
 ## 2.3 Build the **ground movement graph**
-- [ ] Convert taxiway lines + runway hold points → graph:
-  - [ ] Nodes: intersections, hold-shorts, runway entries/exits, parking nodes
-  - [ ] Edges: taxi segments (length, allowed directions, restrictions)
-- [ ] Use Turf for geometry:
-  - [ ] Snap/merge near-intersections
-  - [ ] Compute lengths and bearings
-- [ ] Output: `data/derived/khef/ground.graph.json`
+- [x] Convert taxiway lines + runway hold points → graph:
+  - [x] Nodes: intersections, hold-shorts, runway entries/exits, parking nodes
+  - [x] Edges: taxi segments (length, allowed directions, restrictions)
+- [x] Use Turf for geometry:
+  - [x] Snap/merge near-intersections
+  - [x] Compute lengths and bearings
+- [x] Output: `data/derived/khef/graph.json` (was ground.graph.json)
 
-## 2.4 PMTiles basemap (local region)
-- [ ] Create a small regional basemap tileset:
-  - [ ] OSM extract → vector tiles → **PMTiles**
-- [ ] Host PMTiles on static storage (S3/R2/Vercel Blob/etc.)
-- [ ] Load PMTiles in MapLibre using the pmtiles protocol plugin.
+## 2.4 PMTiles basemap (local region) -> REPLACED by direct GeoJSON
+- [x] Create a small regional basemap tileset:
+  - [x] OSM extract → served via API route `apps/web/app/api/geo`.
+- [x] Host PMTiles on static storage (S3/R2/Vercel Blob/etc.) -> Skipped (Local API).
+- [x] Load PMTiles in MapLibre using the pmtiles protocol plugin -> Loaded GeoJSON in MapLibre.
 
 **Deliverables**
 - [ ] `data/derived/khef/airport.base.json`
