@@ -3,7 +3,10 @@ import {
     Command,
     SpawnAircraftCommand,
     IssueTaxiClearanceCommand,
-    Aircraft
+    TakeoffClearanceCommand,
+    LandingClearanceCommand,
+    Aircraft,
+    KHEF_GATES
 } from '@atc/shared';
 import { GraphManager } from './GraphManager';
 import { RunwayManager } from './RunwayManager';
@@ -34,29 +37,47 @@ export class Simulation {
             this.spawnAircraft(cmd as SpawnAircraftCommand);
         } else if (cmd.type === 'issueTaxiClearance') {
             this.issueTaxiClearance(cmd as IssueTaxiClearanceCommand);
+        } else if (cmd.type === 'takeoffClearance') {
+            this.handleTakeoffClearance(cmd as TakeoffClearanceCommand);
+        } else if (cmd.type === 'landingClearance') {
+            this.handleLandingClearance(cmd as LandingClearanceCommand);
         }
     }
 
     public tick(dt: number) {
         this.state.timestamp = Date.now();
         this.state.aircraft = this.state.aircraft.map(ac => this.updatePhysics(ac, dt));
+
+        // Incursion Check
+        const alerts = this.runwayManager.checkForIncursions(this.state.aircraft);
+        if (alerts.length > 0) {
+            console.warn(`[Sim] Incursions Detected: ${alerts.join(', ')}`);
+        }
+        this.state.alerts = alerts;
     }
 
     private spawnAircraft(cmd: SpawnAircraftCommand) {
-        // Snap to nearest graph node
-        const startNodeId = this.graph.findNearestNode(
-            cmd.payload.startPosition.lat,
-            cmd.payload.startPosition.lon
-        );
+        let spawnPos = { lat: 0, lon: 0, alt: 0, heading: 0 };
+        let startNodeId: string | null = null;
 
-        let finalPos = { ...cmd.payload.startPosition };
-        if (startNodeId) {
-            const node = this.graph.getNode(startNodeId);
-            if (node) {
-                finalPos.lat = node.lat;
-                finalPos.lon = node.lon;
+        if (cmd.payload.gateId) {
+            const gate = KHEF_GATES.find(g => g.id === cmd.payload.gateId);
+            if (gate) {
+                spawnPos = { lat: gate.lat, lon: gate.lon, alt: 300, heading: gate.heading };
+                console.log(`[Sim] Spawning at Gate ${gate.id}`);
+            } else {
+                console.warn(`[Sim] Gate ${cmd.payload.gateId} not found, defaulting`);
             }
+        } else if (cmd.payload.startPosition) {
+            spawnPos = cmd.payload.startPosition;
         }
+
+        // Snap to nearest graph node for routing
+        startNodeId = this.graph.findNearestNode(spawnPos.lat, spawnPos.lon);
+
+        let finalPos = { ...spawnPos };
+        // Optional: Exact snap to node? Or keep gate pos? 
+        // Let's keep gate pos visually, but route starts at node.
 
         const newAircraft: Aircraft = {
             id: Math.random().toString(36).substring(7),
@@ -64,7 +85,8 @@ export class Simulation {
             position: finalPos,
             speed: 0,
             route: startNodeId ? [startNodeId] : [],
-            targetIndex: 0
+            targetIndex: 0,
+            clearance: { type: 'NONE' }
         };
 
         // Mutable update is fine here since it's local state
@@ -73,72 +95,48 @@ export class Simulation {
     }
 
     private issueTaxiClearance(cmd: IssueTaxiClearanceCommand) {
-        // We find the aircraft in the array. Since we will modify it, we can just mutate the object
-        // if we are careful, or map it in tick. 
-        // For 'issueTaxiClearance', we usually modify the aircraft state immediately.
-        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
-        if (!ac) return;
-
-        // Determine Start Node
-        let startNodeId = ac.route && ac.route.length > 0 ? ac.route[ac.route.length - 1] : null;
-
-        if (!startNodeId) {
-            startNodeId = this.graph.findNearestNode(ac.position.lat, ac.position.lon);
-        }
-
-        if (!startNodeId) {
-            console.warn(`[Sim] Could not resolve start node for aircraft ${ac.callsign}`);
+        const aircraft = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!aircraft) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found`);
             return;
         }
 
-        let destNodeId = cmd.payload.destinationNodeId;
+        // Find nearest node
+        const startNodeId = this.graph.findNearestNode(aircraft.position.lat, aircraft.position.lon);
+        if (!startNodeId) {
+            console.warn(`[Sim] Could not find start node for aircraft ${aircraft.id}`);
+            return;
+        }
 
+        // Handle "Test Taxi" special case
+        let destNodeId = cmd.payload.destinationNodeId;
         if (destNodeId === 'test_node') {
             const reachable = this.graph.getReachableNodes(startNodeId);
             const validTargets = reachable.filter(id => id !== startNodeId);
-
             if (validTargets.length > 0) {
                 destNodeId = validTargets[Math.floor(Math.random() * validTargets.length)];
-
-                console.log(`[Sim] Pathfinding from ${startNodeId} to ${destNodeId}`);
-                const path = this.graph.findPath(startNodeId, destNodeId);
-
-                if (path && path.length > 0) {
-                    console.log(`[Sim] Path found to ${destNodeId}: ${path.length} nodes`);
-                    ac.clearance = {
-                        type: 'TAXI',
-                        route: path,
-                        holdShort: undefined
-                    };
-                    ac.route = path;
-                    ac.targetIndex = 1;
-                    ac.speed = 20;
-                    return;
-                }
+            } else {
+                console.warn(`[Sim] No reachable nodes from ${startNodeId}`);
+                return;
             }
-
-            console.warn(`[Sim] No reachable nodes found from ${startNodeId} (Component size: ${reachable.length})`);
-            this.graph.debugConnectivity(startNodeId);
-            return;
         }
 
-        if (destNodeId) {
-            console.log(`[Sim] Pathfinding from ${startNodeId} to ${destNodeId}`);
-            const path = this.graph.findPath(startNodeId, destNodeId);
+        console.log(`[Sim] Pathfinding from ${startNodeId} to ${destNodeId}`);
+        const route = this.graph.findPath(startNodeId, destNodeId);
 
-            if (path && path.length > 0) {
-                console.log(`[Sim] Path found: ${path.length} nodes`);
-                ac.clearance = {
-                    type: 'TAXI',
-                    route: path,
-                    holdShort: undefined
-                };
-                ac.route = path;
-                ac.targetIndex = 1;
-                ac.speed = 20;
-            } else {
-                console.warn(`[Sim] No path found between ${startNodeId} and ${destNodeId}`);
-            }
+        if (route) {
+            aircraft.clearance = {
+                type: 'TAXI',
+                route: route,
+                holdShort: undefined
+            };
+            aircraft.route = route;
+            aircraft.targetIndex = 0;
+            // Hack for speed for now
+            aircraft.speed = 20;
+            console.log(`[Sim] Path found: ${route.length} nodes`);
+        } else {
+            console.warn(`[Sim] No path found`);
         }
     }
 
@@ -183,9 +181,6 @@ export class Simulation {
 
         // This is a rough euclidean approximation for small distances which is fine for airport taxi
         const ratio = moveDeg / dist;
-
-        // If ratio > 1, we overshoot, but next tick will catch it or we snap above
-        // For smoothness, if ratio > 1, just snap? No, let's just move.
 
         const newLat = ac.position.lat + dy * Math.min(ratio, 1);
         const newLon = ac.position.lon + dx * Math.min(ratio, 1);

@@ -42,6 +42,7 @@ export const AircraftSchema = z.object({
 export const WorldStateSchema = z.object({
     aircraft: z.array(AircraftSchema),
     runways: z.array(RunwayStateSchema).optional(), // Optional for backward compat during dev
+    alerts: z.array(z.string()).optional(),
     timestamp: z.number(),
 });
 
@@ -49,7 +50,8 @@ export const SpawnAircraftCommandSchema = z.object({
     type: z.literal('spawnAircraft'),
     payload: z.object({
         callsign: z.string(),
-        startPosition: PositionSchema,
+        startPosition: PositionSchema.optional(), // Legacy support or direct coord spawn
+        gateId: z.string().optional(), // New preferred way
     }),
 });
 
@@ -61,9 +63,27 @@ export const IssueTaxiClearanceCommandSchema = z.object({
     }),
 });
 
+export const TakeoffClearanceCommandSchema = z.object({
+    type: z.literal('takeoffClearance'),
+    payload: z.object({
+        aircraftId: z.string(),
+        runwayId: z.string(),
+    }),
+});
+
+export const LandingClearanceCommandSchema = z.object({
+    type: z.literal('landingClearance'),
+    payload: z.object({
+        aircraftId: z.string(),
+        runwayId: z.string(),
+    }),
+});
+
 export const CommandSchema = z.discriminatedUnion('type', [
     SpawnAircraftCommandSchema,
     IssueTaxiClearanceCommandSchema,
+    TakeoffClearanceCommandSchema,
+    LandingClearanceCommandSchema,
 ]);
 
 // TypeScript Types
@@ -76,4 +96,7 @@ export type Aircraft = z.infer<typeof AircraftSchema>;
 export type WorldState = z.infer<typeof WorldStateSchema>;
 export type SpawnAircraftCommand = z.infer<typeof SpawnAircraftCommandSchema>;
 export type IssueTaxiClearanceCommand = z.infer<typeof IssueTaxiClearanceCommandSchema>;
+export type TakeoffClearanceCommand = z.infer<typeof TakeoffClearanceCommandSchema>;
+export type LandingClearanceCommand = z.infer<typeof LandingClearanceCommandSchema>;
 export type Command = z.infer<typeof CommandSchema>;
+export { KHEF_GATES, type ParkingGate } from './airport';

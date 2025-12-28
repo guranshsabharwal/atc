@@ -7,13 +7,17 @@ import { useSimulation } from "@/hooks/useSimulation";
 export default function Home() {
     const { isConnected, worldState, sendCommand } = useSimulation();
 
-    const handleSpawn = (callsign: string) => {
+    const handleSpawn = (callsign: string, gateId?: string) => {
+        // Fallback random if no gate (though UI enforces gate)
         const lat = 38.7214 + (Math.random() - 0.5) * 0.01;
         const lon = -77.5154 + (Math.random() - 0.5) * 0.01;
 
         sendCommand("spawnAircraft", {
             callsign,
+            // If gateId is present, the server uses it. 
+            // If not, we provide a fallback position.
             startPosition: { lat, lon, alt: 300, heading: 90 },
+            gateId: gateId
         });
     };
 
@@ -39,6 +43,7 @@ export default function Home() {
                         worldState={worldState}
                         onSpawn={handleSpawn}
                         onTaxiTest={(id) => sendCommand('issueTaxiClearance', { aircraftId: id, destinationNodeId: 'test_node' })}
+                        onTakeoff={(id, runwayId) => sendCommand('takeoffClearance', { aircraftId: id, runwayId: runwayId })}
                     />
                 </div>
             </aside>

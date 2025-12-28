@@ -215,22 +215,22 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 
 ## 5.1 Runway state model
 - [x] Runway occupancy, lineup state, landing rollout state
-- [ ] Runway crossing logic:
+- [x] Runway crossing logic:
   - [ ] clearance required
-  - [ ] incursion detection
+  - [x] incursion detection
 
 ## 5.2 Tower clearances (structured)
-- [ ] Implement:
+- [x] Implement:
   - [ ] `lineUpAndWait(runway, intersection?)`
-  - [ ] `clearedForTakeoff(runway, restrictions?)`
-  - [ ] `clearedToLand(runway, restrictions?)`
+  - [x] `clearedForTakeoff(runway, restrictions?)`
+  - [x] `clearedToLand(runway, restrictions?)`
 - [ ] Add basic separation rules (time/distance based, simplified).
 
 ## 5.3 Tower UI
-- [ ] “Local/Tower” view:
-  - [ ] arrival/departure queue
-  - [ ] runway occupancy timeline
-  - [ ] quick action buttons
+- [x] “Local/Tower” view:
+  - [x] arrival/departure queue (Traffic List)
+  - [x] runway occupancy timeline (Runway Status)
+  - [x] quick action buttons
 
 **Deliverables**
 - [ ] Complete VFR pattern scenario without conflicts

@@ -50,9 +50,86 @@ export class GraphManager {
                 }
             });
 
-            console.log(`[GraphManager] Loaded ${this.nodes.size} nodes and ${graph.edges.length} edges (bidirectional).`);
+            console.log(`[GraphManager] Loaded ${this.nodes.size} nodes and ${graph.edges.length} edges.`);
+            this.repairGraphConnectivity();
         } catch (e) {
             console.error('[GraphManager] Failed to load graph:', e);
+        }
+    }
+
+    private repairGraphConnectivity() {
+        const visited = new Set<string>();
+        const components: string[][] = [];
+
+        // Find all connected components
+        for (const nodeId of this.nodes.keys()) {
+            if (!visited.has(nodeId)) {
+                const component: string[] = [];
+                const queue = [nodeId];
+                visited.add(nodeId);
+
+                while (queue.length > 0) {
+                    const current = queue.shift()!;
+                    component.push(current);
+
+                    const neighbors = this.adjacency.get(current) || [];
+                    for (const neighbor of neighbors) {
+                        if (!visited.has(neighbor.to)) {
+                            visited.add(neighbor.to);
+                            queue.push(neighbor.to);
+                        }
+                    }
+                }
+                components.push(component);
+            }
+        }
+
+        // Identify main component (largest)
+        components.sort((a, b) => b.length - a.length);
+        const mainComponent = components[0];
+
+        if (!mainComponent) return;
+
+        const originalCount = this.nodes.size;
+        console.log(`[GraphManager] Found ${components.length} connected components.`);
+        console.log(`[GraphManager] Main component size: ${mainComponent.length} nodes.`);
+
+        let removedNodes = 0;
+        // 3. Try to bridge smaller components to the main one
+        for (let i = 1; i < components.length; i++) {
+            const island = components[i];
+
+            // Find all valid candidates within threshold
+            const candidates: { islandNode: string, mainNode: string, dist: number }[] = [];
+
+            for (const islandNodeId of island) {
+                const islandNode = this.nodes.get(islandNodeId)!;
+
+                for (const mainNodeId of mainComponent) {
+                    const mainNode = this.nodes.get(mainNodeId)!;
+                    const d = this.haversine(islandNode.lat, islandNode.lon, mainNode.lat, mainNode.lon);
+
+                    if (d < 200) {
+                        candidates.push({ islandNode: islandNodeId, mainNode: mainNodeId, dist: d });
+                    }
+                }
+            }
+
+            // 4. Decision: Bridge or Prune?
+            // 4. Decision: Always Prune (as requested to remove "island" entirely)
+            // User requested to "delete this little island in general"
+            if (island.length < 50) {
+                console.log(`[GraphManager] Pruning isolated island (size ${island.length})`);
+                island.forEach(id => {
+                    this.nodes.delete(id);
+                    this.adjacency.delete(id);
+                    removedNodes++;
+                });
+            }
+        }
+
+        if (removedNodes > 0) {
+            console.log(`[GraphManager] Pruned ${removedNodes} nodes from disconnected islands.`);
         }
     }
 
