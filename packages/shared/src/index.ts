@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { RunwayStateSchema } from './airport';
+
 
 // Zod Schemas
 export const PositionSchema = z.object({
@@ -39,6 +41,7 @@ export const AircraftSchema = z.object({
 
 export const WorldStateSchema = z.object({
     aircraft: z.array(AircraftSchema),
+    runways: z.array(RunwayStateSchema).optional(), // Optional for backward compat during dev
     timestamp: z.number(),
 });
 

@@ -8,9 +8,6 @@ export default function Home() {
     const { isConnected, worldState, sendCommand } = useSimulation();
 
     const handleSpawn = (callsign: string) => {
-        // Randomize start pos slightly to hit different graph nodes
-        // KHEF Center approx 38.7214, -77.5154
-        // Delta approx 0.005 deg (~500m)
         const lat = 38.7214 + (Math.random() - 0.5) * 0.01;
         const lon = -77.5154 + (Math.random() - 0.5) * 0.01;
 
@@ -21,22 +18,30 @@ export default function Home() {
     };
 
     return (
-        <main className="min-h-screen bg-background p-8">
-            <div className="max-w-5xl mx-auto space-y-8">
-                <div className="space-y-2">
-                    <h1 className="text-3xl font-bold tracking-tight">ATC Training Simulation</h1>
-                    <p className="text-muted-foreground">Monitor and control the simulation environment.</p>
+        <main className="flex h-screen w-full overflow-hidden bg-background">
+            {/* Map Area */}
+            <div className="flex-1 relative h-full bg-slate-50 dark:bg-slate-950">
+                <div className="absolute inset-0">
+                    <AirportMap worldState={worldState} />
+                </div>
+            </div>
+
+            {/* Sidebar (Right) */}
+            <aside className="w-80 flex-none border-l bg-card h-full flex flex-col overflow-y-auto z-10 shadow-xl">
+                <div className="p-4 border-b">
+                    <h1 className="text-xl font-bold tracking-tight">KHEF Trainer</h1>
+                    <p className="text-xs text-muted-foreground">Server Authoritative Sim</p>
                 </div>
 
-                <AirportMap worldState={worldState} />
-
-                <SimController
-                    connected={isConnected}
-                    worldState={worldState}
-                    onSpawn={handleSpawn}
-                    onTaxiTest={(id) => sendCommand('issueTaxiClearance', { aircraftId: id, destinationNodeId: 'test_node' })}
-                />
-            </div>
+                <div className="p-4 flex-1">
+                    <SimController
+                        connected={isConnected}
+                        worldState={worldState}
+                        onSpawn={handleSpawn}
+                        onTaxiTest={(id) => sendCommand('issueTaxiClearance', { aircraftId: id, destinationNodeId: 'test_node' })}
+                    />
+                </div>
+            </aside>
         </main>
     );
 }

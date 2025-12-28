@@ -20,5 +20,17 @@ export const AirportSchema = z.object({
     runways: z.array(RunwaySchema),
 });
 
+
+export const RunwayStatusSchema = z.enum(['FREE', 'OCCUPIED', 'CROSSING_ACTIVE']);
+
+export const RunwayStateSchema = z.object({
+    id: z.string(), // e.g. "16L"
+    status: RunwayStatusSchema,
+    occupiedBy: z.string().optional(), // Aircraft ID
+    queue: z.array(z.string()), // List of Aircraft IDs waiting
+});
+
 export type Runway = z.infer<typeof RunwaySchema>;
 export type Airport = z.infer<typeof AirportSchema>;
+export type RunwayStatus = z.infer<typeof RunwayStatusSchema>;
+export type RunwayState = z.infer<typeof RunwayStateSchema>;

@@ -6,20 +6,26 @@ import {
     Aircraft
 } from '@atc/shared';
 import { GraphManager } from './GraphManager';
+import { RunwayManager } from './RunwayManager';
 
 export class Simulation {
     private state: WorldState;
     private graph: GraphManager;
+    private runwayManager: RunwayManager;
 
     constructor() {
         this.graph = new GraphManager();
+        this.runwayManager = new RunwayManager();
         this.state = {
             aircraft: [],
+            runways: [],
             timestamp: Date.now()
         };
     }
 
     public getState(): WorldState {
+        // Sync Latest Runway State
+        this.state.runways = this.runwayManager.getAllRunways();
         return this.state;
     }
 

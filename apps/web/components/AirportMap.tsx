@@ -332,7 +332,7 @@ export default function AirportMap({ worldState }: AirportMapProps) {
     }, [loaded, showGraph, showLabels, showLayout]);
 
     return (
-        <div className="relative w-full h-[600px] border rounded-lg overflow-hidden flex flex-col">
+        <div className="relative w-full h-full overflow-hidden flex flex-col">
             <div ref={mapContainer} className="flex-1 relative" />
             {!loaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-100/50 backdrop-blur-sm z-10 pointer-events-none">

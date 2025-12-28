@@ -214,7 +214,7 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 # Phase 5 — Tower MVP (runway ops) (4–10 days)
 
 ## 5.1 Runway state model
-- [ ] Runway occupancy, lineup state, landing rollout state
+- [x] Runway occupancy, lineup state, landing rollout state
 - [ ] Runway crossing logic:
   - [ ] clearance required
   - [ ] incursion detection
