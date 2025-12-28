@@ -42,8 +42,10 @@ export default function Home() {
                         connected={isConnected}
                         worldState={worldState}
                         onSpawn={handleSpawn}
-                        onTaxiTest={(id) => sendCommand('issueTaxiClearance', { aircraftId: id, destinationNodeId: 'test_node' })}
+                        onTaxi={(id, destRunway) => sendCommand('issueTaxiClearance', { aircraftId: id, destinationRunwayId: destRunway })}
                         onTakeoff={(id, runwayId) => sendCommand('takeoffClearance', { aircraftId: id, runwayId: runwayId })}
+                        onLanding={(id, runwayId) => sendCommand('landingClearance', { aircraftId: id, runwayId: runwayId })}
+                        onDelete={(id) => sendCommand('deleteAircraft', { aircraftId: id })}
                     />
                 </div>
             </aside>

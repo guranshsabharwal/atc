@@ -236,6 +236,13 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 - [ ] Complete VFR pattern scenario without conflicts
 - [ ] Runway incursion warning fires when violated
 
+## Known Issues (to fix before Phase 6)
+- [ ] **Pathfinding uses runways for taxi** - Aircraft taxi routes go ON runways instead of taxiways only
+- [ ] **Hold short positions not exact** - Aircraft stops near but not exactly at runway threshold
+- [ ] **Taxi to 34L fails** - No path found from TERMINAL to 34L hold short
+- [ ] **No runway crossing logic** - To reach 16R from east side, should hold short of 16L first
+- [ ] **Hold short position not aligned with runway** - Aircraft may need to reposition before takeoff
+
 ---
 
 # Phase 6 — Approach/Departure MVP (radar scope + sequencing) (5–14 days)

@@ -107,19 +107,60 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                 filter: ['==', 'aeroway', 'taxiway']
             });
 
+            // Custom Runway Threshold Labels - Individual designators at each end
+            // Coordinates from OSM runway geometry
+            map.current?.addSource('runway-thresholds', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: [
+                        // Runway 16L/34R (main runway - runs NW to SE)
+                        // 16L = northwest end, 34R = southeast end
+                        { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5187, 38.7277] }, properties: { label: '16L' } },
+                        { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5081, 38.7129] }, properties: { label: '34R' } },
+                        // Runway 16R/34L (parallel runway - west of main)
+                        // 16R = northwest end, 34L = southeast end  
+                        { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5210, 38.7266] }, properties: { label: '16R' } },
+                        { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5147, 38.7178] }, properties: { label: '34L' } }
+                    ]
+                }
+            });
+
+            // Runway Threshold Labels - LARGE and Bold
+            map.current?.addLayer({
+                id: 'airport-runway-labels',
+                type: 'symbol',
+                source: 'runway-thresholds',
+                layout: {
+                    'text-field': ['get', 'label'],
+                    'text-size': 18,
+                    'text-font': ['Open Sans Bold'],
+                    'text-offset': [0, 0],
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true,
+                    visibility: 'visible'
+                },
+                paint: {
+                    'text-color': '#ffffff',
+                    'text-halo-color': '#000000',
+                    'text-halo-width': 2
+                }
+            });
+
+            // Taxiway Labels - smaller
             map.current?.addLayer({
                 id: 'airport-labels',
                 type: 'symbol',
                 source: 'airport-osm',
                 layout: {
                     'text-field': ['get', 'label'],
-                    'text-size': 10,
+                    'text-size': 11,
                     'text-offset': [0, 1],
                     'text-anchor': 'top',
                     visibility: 'visible'
                 },
                 paint: { 'text-color': '#333', 'text-halo-color': '#fff', 'text-halo-width': 1 },
-                filter: ['any', ['==', 'aeroway', 'runway'], ['==', 'aeroway', 'taxiway']]
+                filter: ['==', 'aeroway', 'taxiway']
             });
 
             map.current?.addLayer({
@@ -323,6 +364,7 @@ export default function AirportMap({ worldState }: AirportMapProps) {
 
         const labelVisibility = showLabels ? 'visible' : 'none';
         map.current.setLayoutProperty('airport-labels', 'visibility', labelVisibility);
+        map.current.setLayoutProperty('airport-runway-labels', 'visibility', labelVisibility);
 
         const layoutVisibility = showLayout ? 'visible' : 'none';
         map.current.setLayoutProperty('airport-runways', 'visibility', layoutVisibility);

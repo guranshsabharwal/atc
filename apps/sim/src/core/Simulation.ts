@@ -5,6 +5,7 @@ import {
     IssueTaxiClearanceCommand,
     TakeoffClearanceCommand,
     LandingClearanceCommand,
+    DeleteAircraftCommand,
     Aircraft,
     KHEF_GATES
 } from '@atc/shared';
@@ -41,6 +42,8 @@ export class Simulation {
             this.handleTakeoffClearance(cmd as TakeoffClearanceCommand);
         } else if (cmd.type === 'landingClearance') {
             this.handleLandingClearance(cmd as LandingClearanceCommand);
+        } else if (cmd.type === 'deleteAircraft') {
+            this.deleteAircraft(cmd as DeleteAircraftCommand);
         }
     }
 
@@ -101,46 +104,99 @@ export class Simulation {
             return;
         }
 
-        // Find nearest node
-        const startNodeId = this.graph.findNearestNode(aircraft.position.lat, aircraft.position.lon);
+        // Find nearest node to start routing from
+        const startNodeId = this.graph.findNearestNode(aircraft.position.lat, aircraft.position.lon, aircraft.position.heading);
         if (!startNodeId) {
             console.warn(`[Sim] Could not find start node for aircraft ${aircraft.id}`);
             return;
         }
 
-        // Handle "Test Taxi" special case
-        let destNodeId = cmd.payload.destinationNodeId;
-        if (destNodeId === 'test_node') {
-            const reachable = this.graph.getReachableNodes(startNodeId);
-            const validTargets = reachable.filter(id => id !== startNodeId);
-            if (validTargets.length > 0) {
-                destNodeId = validTargets[Math.floor(Math.random() * validTargets.length)];
-            } else {
-                console.warn(`[Sim] No reachable nodes from ${startNodeId}`);
-                return;
-            }
+        // Get the hold short node for the destination runway
+        const runwayId = cmd.payload.destinationRunwayId;
+        const holdShortNodeId = this.graph.getHoldShortNodeForRunway(runwayId);
+
+        if (!holdShortNodeId) {
+            console.warn(`[Sim] Could not find hold short node for runway ${runwayId}`);
+            return;
         }
 
-        console.log(`[Sim] Pathfinding from ${startNodeId} to ${destNodeId}`);
-        const route = this.graph.findPath(startNodeId, destNodeId);
+        console.log(`[Sim] Pathfinding from ${startNodeId} to hold short ${holdShortNodeId} for runway ${runwayId}`);
+        const route = this.graph.findPath(startNodeId, holdShortNodeId);
 
         if (route) {
             aircraft.clearance = {
                 type: 'TAXI',
                 route: route,
-                holdShort: undefined
+                holdShort: holdShortNodeId // Set the hold short node
             };
             aircraft.route = route;
             aircraft.targetIndex = 0;
-            // Hack for speed for now
-            aircraft.speed = 20;
-            console.log(`[Sim] Path found: ${route.length} nodes`);
+            aircraft.speed = 60; // Taxi speed in knots (increased for testing)
+            console.log(`[Sim] Path found: ${route.length} nodes, hold short at ${holdShortNodeId}`);
         } else {
-            console.warn(`[Sim] No path found`);
+            console.warn(`[Sim] No path found from ${startNodeId} to ${holdShortNodeId}`);
         }
     }
 
+    private handleTakeoffClearance(cmd: TakeoffClearanceCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (ac) {
+            // Runway headings (from runway designator - e.g. 16 = 160 degrees)
+            const runwayHeadings: Record<string, number> = {
+                '16L': 160, '16R': 160,
+                '34R': 340, '34L': 340
+            };
+
+            const heading = runwayHeadings[cmd.payload.runwayId] || ac.position.heading;
+
+            ac.clearance = { type: 'TAKEOFF', runwayId: cmd.payload.runwayId };
+            ac.speed = 120; // Simulated takeoff speed
+            ac.position.heading = heading; // Align with runway
+
+            console.log(`[Sim] Aircraft ${ac.callsign} taking off from ${cmd.payload.runwayId} heading ${heading}`);
+            this.runwayManager.occupyRunway(cmd.payload.runwayId, ac.id);
+        }
+    }
+
+    private handleLandingClearance(cmd: LandingClearanceCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (ac) {
+            ac.clearance = { type: 'LAND', runwayId: cmd.payload.runwayId };
+            console.log(`[Sim] Aircraft ${ac.callsign} landing on ${cmd.payload.runwayId}`);
+            this.runwayManager.occupyRunway(cmd.payload.runwayId, ac.id);
+        }
+    }
+
+    private deleteAircraft(cmd: DeleteAircraftCommand) {
+        const index = this.state.aircraft.findIndex(a => a.id === cmd.payload.aircraftId);
+        if (index !== -1) {
+            console.log(`[Sim] Deleted aircraft ${this.state.aircraft[index].callsign}`);
+            this.state.aircraft.splice(index, 1);
+        } else {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for deletion`);
+        }
+    }
+
+
     private updatePhysics(ac: Aircraft, dt: number): Aircraft {
+        // Handle TAKEOFF - move forward on heading, no route needed
+        if (ac.clearance?.type === 'TAKEOFF' && ac.speed > 0) {
+            const heading = ac.position.heading;
+            const speedKmph = ac.speed * 1.852;
+            const distKm = speedKmph * (dt / 3600);
+            const moveDeg = distKm / 111.0;
+
+            // Move in heading direction
+            const headingRad = (heading * Math.PI) / 180;
+            const newLat = ac.position.lat + moveDeg * Math.cos(headingRad);
+            const newLon = ac.position.lon + moveDeg * Math.sin(headingRad) / Math.cos(ac.position.lat * Math.PI / 180);
+
+            return {
+                ...ac,
+                position: { ...ac.position, lat: newLat, lon: newLon }
+            };
+        }
+
         // Return a new object if changes happen, or original if not
         if (!ac.route || ac.targetIndex === undefined || ac.targetIndex >= ac.route.length) {
             if (ac.speed > 0) {
@@ -162,10 +218,26 @@ export class Simulation {
 
         // Threshold 0.00005 deg is roughly 5 meters
         if (dist < 0.00005) {
+            const newTargetIndex = ac.targetIndex + 1;
+
+            // Check if we've reached the hold short node
+            const clearance = ac.clearance;
+            if (clearance && clearance.type === 'TAXI' && clearance.holdShort === targetNodeId) {
+                // Aircraft has reached hold short - STOP and wait
+                console.log(`[Sim] Aircraft ${ac.callsign} holding short at ${targetNodeId}`);
+                return {
+                    ...ac,
+                    position: { ...ac.position, lat: targetNode.lat, lon: targetNode.lon },
+                    speed: 0,
+                    clearance: { type: 'HOLD' }, // Change to HOLD state
+                    targetIndex: newTargetIndex
+                };
+            }
+
             return {
                 ...ac,
                 position: { ...ac.position, lat: targetNode.lat, lon: targetNode.lon },
-                targetIndex: ac.targetIndex + 1
+                targetIndex: newTargetIndex
             };
         }
 

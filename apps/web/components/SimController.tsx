@@ -4,17 +4,31 @@ import { useState } from "react";
 import { WorldState, Aircraft, KHEF_GATES } from "@atc/shared";
 import { Button } from "@/components/ui/button";
 
+// KHEF Runways
+const KHEF_RUNWAYS = ['16L', '34R', '16R', '34L'];
+
 interface SimControllerProps {
     connected: boolean;
     worldState: WorldState | null;
     onSpawn: (callsign: string, gateId?: string) => void;
-    onTaxiTest?: (aircraftId: string) => void;
+    onTaxi?: (aircraftId: string, destinationRunwayId: string) => void;
     onTakeoff?: (aircraftId: string, runwayId: string) => void;
+    onLanding?: (aircraftId: string, runwayId: string) => void;
+    onDelete?: (aircraftId: string) => void;
 }
 
-export default function SimController({ connected, worldState, onSpawn, onTaxiTest, onTakeoff }: SimControllerProps) {
+export default function SimController({
+    connected,
+    worldState,
+    onSpawn,
+    onTaxi,
+    onTakeoff,
+    onLanding,
+    onDelete
+}: SimControllerProps) {
     const [callsign, setCallsign] = useState("UAL123");
     const [selectedGate, setSelectedGate] = useState(KHEF_GATES[0].id);
+    const [taxiDestination, setTaxiDestination] = useState(KHEF_RUNWAYS[0]);
 
     const handleSpawn = () => {
         onSpawn(callsign, selectedGate);
@@ -75,10 +89,9 @@ export default function SimController({ connected, worldState, onSpawn, onTaxiTe
                             value={selectedRunway}
                             onChange={e => setSelectedRunway(e.target.value)}
                         >
-                            <option value="16L">16L</option>
-                            <option value="34R">34R</option>
-                            <option value="16R">16R</option>
-                            <option value="34L">34L</option>
+                            {KHEF_RUNWAYS.map(rwy => (
+                                <option key={rwy} value={rwy}>{rwy}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -125,11 +138,23 @@ export default function SimController({ connected, worldState, onSpawn, onTaxiTe
                             <div className="flex justify-between items-center mb-2">
                                 <span className="font-mono font-bold text-sm">{ac.callsign}</span>
                                 <div className="flex gap-1">
-                                    <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => onTaxiTest && onTaxiTest(ac.id)}>
+                                    <select
+                                        className="h-6 text-[10px] px-1 rounded border border-input bg-background"
+                                        value={taxiDestination}
+                                        onChange={e => setTaxiDestination(e.target.value)}
+                                    >
+                                        {KHEF_RUNWAYS.map(rwy => (
+                                            <option key={rwy} value={rwy}>→ {rwy}</option>
+                                        ))}
+                                    </select>
+                                    <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => onTaxi && onTaxi(ac.id, taxiDestination)}>
                                         Taxi
                                     </Button>
                                     <Button size="sm" variant="default" className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => onTakeoff && onTakeoff(ac.id, selectedRunway)}>
                                         Takeoff {selectedRunway}
+                                    </Button>
+                                    <Button size="sm" variant="destructive" className="h-6 text-[10px] px-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onDelete && onDelete(ac.id)}>
+                                        ×
                                     </Button>
                                 </div>
                             </div>

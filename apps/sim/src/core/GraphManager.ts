@@ -133,18 +133,62 @@ export class GraphManager {
         }
     }
 
-    public findNearestNode(lat: number, lon: number): string | null {
+    public findNearestNode(lat: number, lon: number, heading?: number): string | null {
         let nearestId: string | null = null;
         let minDist = Infinity;
 
         for (const node of this.nodes.values()) {
             const d = this.haversine(lat, lon, node.lat, node.lon);
+
+            // Optimization: Skip if too far (e.g., > 500m) to save CPU
+            if (d > 500) continue;
+
+            // Directional Logic: If heading is provided (aircraft is moving), 
+            // avoid snapping to nodes *behind* the aircraft to prevent backtracking.
+            if (heading !== undefined) {
+                const bearingToNode = this.bearing(lat, lon, node.lat, node.lon);
+                const angleDiff = Math.abs(this.getAngleDiff(heading, bearingToNode));
+
+                // If the node is behind us (> 90 degrees), heavily penalize the distance 
+                // effectively making it "farther" than nodes in front.
+                // Exception: If we are extremely close (< 10m), it's probably the node we are on, so accept it.
+                if (angleDiff > 90 && d > 10) {
+                    // Add penalty (e.g. +100m) so we prefer a slightly further node in FRONT
+                    // rather than a closer node BEHIND.
+                    if (d + 100 < minDist) {
+                        minDist = d + 100;
+                        nearestId = node.id;
+                    }
+                    continue;
+                }
+            }
+
             if (d < minDist) {
                 minDist = d;
                 nearestId = node.id;
             }
         }
         return nearestId;
+    }
+
+    private getAngleDiff(a: number, b: number): number {
+        let diff = b - a;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        return diff;
+    }
+
+    private bearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const toRad = Math.PI / 180;
+        const toDeg = 180 / Math.PI;
+
+        const dLon = (lon2 - lon1) * toRad;
+        const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+        const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+            Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+
+        let brng = Math.atan2(y, x) * toDeg;
+        return (brng + 360) % 360;
     }
 
     public getNode(id: string): GraphNode | undefined {
@@ -330,5 +374,50 @@ export class GraphManager {
         const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(1 - clampedA));
 
         return R * c;
+    }
+
+    /**
+     * Get a hold short node for a runway.
+     * This finds the nearest graph node to the runway threshold (start position)
+     * that is NOT on the runway itself (i.e., slightly offset for hold short).
+     */
+    public getHoldShortNodeForRunway(runwayId: string): string | null {
+        // Runway hold short areas - these are approximate taxiway positions 
+        // near where aircraft would hold short before entering the runway
+        // Based on KHEF airport layout - Taxiway A runs parallel to runways
+        const holdShortAreas: Record<string, { lat: number; lon: number; searchRadius: number }> = {
+            // 16L/34R is the main runway - hold short would be on Taxiway A
+            '16L': { lat: 38.7268, lon: -77.5175, searchRadius: 200 }, // North end of 16L, Taxiway A area
+            '34R': { lat: 38.7145, lon: -77.5100, searchRadius: 200 }, // South end (same runway opp direction)
+            '16R': { lat: 38.7255, lon: -77.5190, searchRadius: 200 }, // North end of 16R, Taxiway A area
+            '34L': { lat: 38.7165, lon: -77.5130, searchRadius: 200 }  // South end (same runway opp direction)
+        };
+
+        const holdArea = holdShortAreas[runwayId];
+        if (!holdArea) {
+            console.warn(`[GraphManager] Unknown runway: ${runwayId}`);
+            return null;
+        }
+
+        // Find the closest node within the search radius
+        let bestNode: string | null = null;
+        let bestDist = Infinity;
+
+        for (const node of this.nodes.values()) {
+            const dist = this.haversine(holdArea.lat, holdArea.lon, node.lat, node.lon);
+            if (dist < holdArea.searchRadius && dist < bestDist) {
+                bestDist = dist;
+                bestNode = node.id;
+            }
+        }
+
+        if (bestNode) {
+            const node = this.nodes.get(bestNode);
+            console.log(`[GraphManager] Hold short for ${runwayId}: ${bestNode} (${bestDist.toFixed(1)}m away) at ${node?.lat}, ${node?.lon}`);
+        } else {
+            console.warn(`[GraphManager] No hold short node found for ${runwayId} within ${holdArea.searchRadius}m`);
+        }
+
+        return bestNode;
     }
 }
