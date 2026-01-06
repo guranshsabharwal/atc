@@ -6,6 +6,7 @@ import {
     TakeoffClearanceCommand,
     LandingClearanceCommand,
     DeleteAircraftCommand,
+    LineUpAndWaitCommand,
     Aircraft,
     KHEF_GATES
 } from '@atc/shared';
@@ -44,12 +45,17 @@ export class Simulation {
             this.handleLandingClearance(cmd as LandingClearanceCommand);
         } else if (cmd.type === 'deleteAircraft') {
             this.deleteAircraft(cmd as DeleteAircraftCommand);
+        } else if (cmd.type === 'lineUpAndWait') {
+            this.handleLineUpAndWait(cmd as LineUpAndWaitCommand);
         }
     }
 
     public tick(dt: number) {
         this.state.timestamp = Date.now();
-        this.state.aircraft = this.state.aircraft.map(ac => this.updatePhysics(ac, dt));
+        this.state.timestamp = Date.now();
+        this.state.aircraft = this.state.aircraft
+            .map(ac => this.updatePhysics(ac, dt))
+            .filter(ac => ac.clearance?.type !== 'DEPARTED');
 
         // Incursion Check
         const alerts = this.runwayManager.checkForIncursions(this.state.aircraft);
@@ -75,8 +81,9 @@ export class Simulation {
             spawnPos = cmd.payload.startPosition;
         }
 
-        // Snap to nearest graph node for routing
-        startNodeId = this.graph.findNearestNode(spawnPos.lat, spawnPos.lon);
+        // Always use heading-aware findNearestNode to find nodes in direction aircraft is facing
+        // This prevents backtracking by filtering out nodes behind the aircraft
+        startNodeId = this.graph.findNearestNode(spawnPos.lat, spawnPos.lon, spawnPos.heading);
 
         let finalPos = { ...spawnPos };
         // Optional: Exact snap to node? Or keep gate pos? 
@@ -104,12 +111,17 @@ export class Simulation {
             return;
         }
 
-        // Find nearest node to start routing from
-        const startNodeId = this.graph.findNearestNode(aircraft.position.lat, aircraft.position.lon, aircraft.position.heading);
+        // Always use aircraft's current position for pathfinding start
+        // This prevents backtracking to the original spawn node
+        const startNodeId = this.graph.findNearestNode(
+            aircraft.position.lat,
+            aircraft.position.lon
+        );
         if (!startNodeId) {
             console.warn(`[Sim] Could not find start node for aircraft ${aircraft.id}`);
             return;
         }
+        console.log(`[Sim] Using current position node: ${startNodeId}`);
 
         // Get the hold short node for the destination runway
         const runwayId = cmd.payload.destinationRunwayId;
@@ -121,7 +133,7 @@ export class Simulation {
         }
 
         console.log(`[Sim] Pathfinding from ${startNodeId} to hold short ${holdShortNodeId} for runway ${runwayId}`);
-        const route = this.graph.findPath(startNodeId, holdShortNodeId);
+        const route = this.graph.findPath(startNodeId, holdShortNodeId, { allowRunways: false });
 
         if (route) {
             aircraft.clearance = {
@@ -140,22 +152,61 @@ export class Simulation {
 
     private handleTakeoffClearance(cmd: TakeoffClearanceCommand) {
         const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
-        if (ac) {
-            // Runway headings (from runway designator - e.g. 16 = 160 degrees)
-            const runwayHeadings: Record<string, number> = {
-                '16L': 160, '16R': 160,
-                '34R': 340, '34L': 340
-            };
-
-            const heading = runwayHeadings[cmd.payload.runwayId] || ac.position.heading;
-
-            ac.clearance = { type: 'TAKEOFF', runwayId: cmd.payload.runwayId };
-            ac.speed = 120; // Simulated takeoff speed
-            ac.position.heading = heading; // Align with runway
-
-            console.log(`[Sim] Aircraft ${ac.callsign} taking off from ${cmd.payload.runwayId} heading ${heading}`);
-            this.runwayManager.occupyRunway(cmd.payload.runwayId, ac.id);
+        if (!ac) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for takeoff`);
+            return;
         }
+
+        // Validate aircraft is ready for takeoff
+        // Must be either: holding short (taxi complete) or already lined up
+        const isHoldingShort = ac.clearance?.type === 'TAXI' &&
+            ac.route && ac.route.length > 0 &&
+            (ac.targetIndex ?? 0) >= ac.route.length - 1;
+        const isLinedUp = ac.clearance?.type === 'LINEUP';
+
+        if (!isHoldingShort && !isLinedUp) {
+            console.warn(`[Sim] Cannot takeoff: ${ac.callsign} not at hold short or lined up (clearance: ${ac.clearance?.type}, targetIndex: ${ac.targetIndex}, routeLen: ${ac.route?.length})`);
+            return;
+        }
+
+        // Get runway end point (opposite runway entry)
+        const oppositeRunwayMap: Record<string, string> = {
+            '16L': '34R', '34R': '16L',
+            '16R': '34L', '34L': '16R'
+        };
+        const endRunwayId = oppositeRunwayMap[cmd.payload.runwayId];
+        const endNodeId = this.graph.getRunwayEntryNode(endRunwayId);
+
+        if (!endNodeId) {
+            console.warn(`[Sim] Could not find end node for runway ${cmd.payload.runwayId} (using ${endRunwayId})`);
+            return;
+        }
+
+        // Find current node
+        const currentNodeId = this.graph.findNearestNode(ac.position.lat, ac.position.lon);
+        if (!currentNodeId) {
+            console.warn(`[Sim] Could not find start node for takeoff`);
+            return;
+        }
+
+        // Create route along runway
+        const route = this.graph.findPath(currentNodeId, endNodeId, { allowRunways: true });
+
+        // Runway headings (from runway designator - e.g. 16 = 160 degrees)
+        const runwayHeadings: Record<string, number> = {
+            '16L': 160, '16R': 160,
+            '34R': 340, '34L': 340
+        };
+        const heading = runwayHeadings[cmd.payload.runwayId] || ac.position.heading;
+
+        ac.clearance = { type: 'TAKEOFF', runwayId: cmd.payload.runwayId };
+        ac.route = route || [];
+        ac.targetIndex = 0;
+        ac.speed = 0; // Accelerate from 0 or current speed
+        ac.position.heading = heading;
+
+        console.log(`[Sim] Aircraft ${ac.callsign} taking off from ${cmd.payload.runwayId}, route len: ${route?.length}`);
+        this.runwayManager.occupyRunway(cmd.payload.runwayId, ac.id);
     }
 
     private handleLandingClearance(cmd: LandingClearanceCommand) {
@@ -177,30 +228,78 @@ export class Simulation {
         }
     }
 
-
-    private updatePhysics(ac: Aircraft, dt: number): Aircraft {
-        // Handle TAKEOFF - move forward on heading, no route needed
-        if (ac.clearance?.type === 'TAKEOFF' && ac.speed > 0) {
-            const heading = ac.position.heading;
-            const speedKmph = ac.speed * 1.852;
-            const distKm = speedKmph * (dt / 3600);
-            const moveDeg = distKm / 111.0;
-
-            // Move in heading direction
-            const headingRad = (heading * Math.PI) / 180;
-            const newLat = ac.position.lat + moveDeg * Math.cos(headingRad);
-            const newLon = ac.position.lon + moveDeg * Math.sin(headingRad) / Math.cos(ac.position.lat * Math.PI / 180);
-
-            return {
-                ...ac,
-                position: { ...ac.position, lat: newLat, lon: newLon }
-            };
+    private handleLineUpAndWait(cmd: LineUpAndWaitCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!ac) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for line up and wait`);
+            return;
         }
 
-        // Return a new object if changes happen, or original if not
+        // Get runway entry point
+        const runwayId = cmd.payload.runwayId;
+        const entryNodeId = this.graph.getRunwayEntryNode(runwayId);
+        if (!entryNodeId) {
+            console.warn(`[Sim] Could not find runway entry node for ${runwayId}`);
+            return;
+        }
+
+        // Find current position node (should be at hold short)
+        const currentNodeId = this.graph.findNearestNode(ac.position.lat, ac.position.lon);
+        if (!currentNodeId) {
+            console.warn(`[Sim] Could not find current node for aircraft ${ac.callsign}`);
+            return;
+        }
+
+        // Create route from hold short to runway entry (allow runways for this)
+        const route = this.graph.findPath(currentNodeId, entryNodeId, { allowRunways: true });
+
+        // Runway headings (from runway designator - e.g. 16 = 160 degrees)
+        const runwayHeadings: Record<string, number> = {
+            '16L': 160, '16R': 160,
+            '34R': 340, '34L': 340
+        };
+
+        const heading = runwayHeadings[runwayId] || ac.position.heading;
+
+        ac.clearance = { type: 'LINEUP', runwayId: runwayId };
+        ac.route = route || [];
+        ac.targetIndex = 0;
+        ac.speed = 20; // Slow taxi onto runway
+        ac.position.heading = heading; // Align with runway
+
+        console.log(`[Sim] Aircraft ${ac.callsign} lining up on ${runwayId}, route: ${route?.length || 0} nodes`);
+        this.runwayManager.occupyRunway(runwayId, ac.id);
+    }
+
+    private updatePhysics(ac: Aircraft, dt: number): Aircraft {
+        // Handle speed updates based on state
+        if (ac.clearance?.type === 'TAKEOFF') {
+            // Accelerate to takeoff speed
+            ac.speed = Math.min(ac.speed + 5, 140); // Simple acceleration
+        } else if (ac.clearance?.type === 'LAND') {
+            // Decelerate
+            ac.speed = Math.max(ac.speed - 2, 20);
+        }
+
         if (!ac.route || ac.targetIndex === undefined || ac.targetIndex >= ac.route.length) {
             if (ac.speed > 0) {
-                return { ...ac, speed: 0, clearance: { type: 'NONE' } };
+                // If we finished the route during TAKEOFF, aircraft has departed
+                if (ac.clearance?.type === 'TAKEOFF') {
+                    console.log(`[Sim] Aircraft ${ac.callsign} has departed!`);
+
+                    // Release the runway
+                    this.runwayManager.releaseRunway(ac.clearance.runwayId);
+
+                    // Mark as departed
+                    return {
+                        ...ac,
+                        speed: 0,
+                        clearance: { type: 'DEPARTED' },
+                        route: [],
+                    };
+                }
+                // For other clearances (TAXI, LINEUP), stop but keep clearance
+                return { ...ac, speed: 0 };
             }
             return ac;
         }

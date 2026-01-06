@@ -11,6 +11,8 @@ interface GraphEdge {
     from: string;
     to: string;
     distance: number;
+    type?: string;  // 'taxiway' | 'runway'
+    ref?: string;   // Taxiway/runway identifier like 'A', '16L'
 }
 
 interface GroundGraph {
@@ -20,7 +22,16 @@ interface GroundGraph {
 
 export class GraphManager {
     private nodes: Map<string, GraphNode> = new Map();
-    private adjacency: Map<string, { to: string; distance: number }[]> = new Map();
+    private adjacency: Map<string, { to: string; distance: number; type?: string; ref?: string }[]> = new Map();
+
+    // Explicit gate-to-graph-node mappings to prevent backtracking on route start
+    // These node IDs are verified to exist in graph.json
+    private readonly GATE_START_NODES: Record<string, string> = {
+        'TERMINAL': '-77.511210,38.723789',   // Verified: graph.json line 3-7, on Taxiway Z
+        'APP_JET': '-77.515420,38.729067',    // On Taxiway Z heading toward A
+        'SOUTH_RAMP': '-77.517580,38.720492', // Near Taxiway A/B intersection
+        'WEST_RAMP': '-77.519918,38.722276',  // On Taxiway A west side
+    };
 
     constructor() {
         this.loadGraph();
@@ -45,8 +56,8 @@ export class GraphManager {
 
             graph.edges.forEach(edge => {
                 if (this.nodes.has(edge.from) && this.nodes.has(edge.to)) {
-                    this.adjacency.get(edge.from)?.push({ to: edge.to, distance: edge.distance });
-                    this.adjacency.get(edge.to)?.push({ to: edge.from, distance: edge.distance });
+                    this.adjacency.get(edge.from)?.push({ to: edge.to, distance: edge.distance, type: edge.type, ref: edge.ref });
+                    this.adjacency.get(edge.to)?.push({ to: edge.from, distance: edge.distance, type: edge.type, ref: edge.ref });
                 }
             });
 
@@ -131,6 +142,22 @@ export class GraphManager {
         if (removedNodes > 0) {
             console.log(`[GraphManager] Pruned ${removedNodes} nodes from disconnected islands.`);
         }
+    }
+
+    /**
+     * Get the preferred start node for a gate. Uses explicit mapping if available,
+     * otherwise falls back to findNearestNode.
+     */
+    public getStartNodeForGate(gateId: string, lat: number, lon: number, heading?: number): string | null {
+        // Check explicit mapping first
+        const explicitNode = this.GATE_START_NODES[gateId];
+        if (explicitNode && this.nodes.has(explicitNode)) {
+            console.log(`[GraphManager] Using explicit start node for ${gateId}: ${explicitNode}`);
+            return explicitNode;
+        }
+
+        // Fall back to nearest node search
+        return this.findNearestNode(lat, lon, heading);
     }
 
     public findNearestNode(lat: number, lon: number, heading?: number): string | null {
@@ -227,14 +254,14 @@ export class GraphManager {
     }
 
     // A* Pathfinding with BFS Fallback
-    public findPath(startId: string, endId: string): string[] | null {
+    public findPath(startId: string, endId: string, options?: { allowRunways?: boolean }): string[] | null {
         if (!this.nodes.has(startId) || !this.nodes.has(endId)) {
             console.warn(`[GraphManager] Start or End node not found.`);
             return null;
         }
 
         // Try A* First
-        const aStarPath = this.runAStar(startId, endId);
+        const aStarPath = this.runAStar(startId, endId, options);
         if (aStarPath) {
             return aStarPath;
         }
@@ -242,10 +269,10 @@ export class GraphManager {
         console.warn(`[GraphManager] A* failed to find path from ${startId} to ${endId}. Falling back to BFS.`);
 
         // Fallback to BFS
-        return this.runBFS(startId, endId);
+        return this.runBFS(startId, endId, options);
     }
 
-    private runAStar(startId: string, endId: string): string[] | null {
+    private runAStar(startId: string, endId: string, options?: { allowRunways?: boolean }): string[] | null {
         const openSet: string[] = [startId];
         const cameFrom: Map<string, string> = new Map();
 
@@ -296,6 +323,8 @@ export class GraphManager {
             for (const neighbor of neighbors) {
                 if (closedSet.has(neighbor.to)) continue;
 
+                // Skip runway edges during taxi unless explicitly allowed
+                if (options?.allowRunways === false && neighbor.type === 'runway') continue;
                 const dist = (neighbor.distance && neighbor.distance > 0) ? neighbor.distance : 1;
 
                 // CRITICAL FIX: Handle 0 value correctly using ?? instead of ||
@@ -319,7 +348,7 @@ export class GraphManager {
         return null;
     }
 
-    private runBFS(startId: string, endId: string): string[] | null {
+    private runBFS(startId: string, endId: string, options?: { allowRunways?: boolean }): string[] | null {
         const queue: string[] = [startId];
         const cameFrom: Map<string, string> = new Map();
         const visited = new Set<string>();
@@ -332,6 +361,9 @@ export class GraphManager {
             const neighbors = this.adjacency.get(current) || [];
 
             for (const n of neighbors) {
+                // Skip runway edges during taxi unless explicitly allowed
+                if (options?.allowRunways === false && n.type === 'runway') continue;
+
                 if (!visited.has(n.to)) {
                     visited.add(n.to);
                     cameFrom.set(n.to, current);
@@ -382,15 +414,17 @@ export class GraphManager {
      * that is NOT on the runway itself (i.e., slightly offset for hold short).
      */
     public getHoldShortNodeForRunway(runwayId: string): string | null {
-        // Runway hold short areas - these are approximate taxiway positions 
-        // near where aircraft would hold short before entering the runway
-        // Based on KHEF airport layout - Taxiway A runs parallel to runways
+        // Runway hold short areas - specific taxiway nodes near runway thresholds
+        // These are the exact intersection points of taxiways with runway hold short lines
         const holdShortAreas: Record<string, { lat: number; lon: number; searchRadius: number }> = {
-            // 16L/34R is the main runway - hold short would be on Taxiway A
-            '16L': { lat: 38.7268, lon: -77.5175, searchRadius: 200 }, // North end of 16L, Taxiway A area
-            '34R': { lat: 38.7145, lon: -77.5100, searchRadius: 200 }, // South end (same runway opp direction)
-            '16R': { lat: 38.7255, lon: -77.5190, searchRadius: 200 }, // North end of 16R, Taxiway A area
-            '34L': { lat: 38.7165, lon: -77.5130, searchRadius: 200 }  // South end (same runway opp direction)
+            // 16L - where taxiway A meets the 16L threshold (north end)
+            '16L': { lat: 38.7277, lon: -77.5185, searchRadius: 100 },
+            // 34R - south end of same runway
+            '34R': { lat: 38.7138, lon: -77.5088, searchRadius: 100 },
+            // 16R - where taxiway meets 16R threshold (west runway, north end)  
+            '16R': { lat: 38.7252, lon: -77.5200, searchRadius: 100 },
+            // 34L - south end of west runway
+            '34L': { lat: 38.7145, lon: -77.5095, searchRadius: 100 }
         };
 
         const holdArea = holdShortAreas[runwayId];
@@ -416,6 +450,52 @@ export class GraphManager {
             console.log(`[GraphManager] Hold short for ${runwayId}: ${bestNode} (${bestDist.toFixed(1)}m away) at ${node?.lat}, ${node?.lon}`);
         } else {
             console.warn(`[GraphManager] No hold short node found for ${runwayId} within ${holdArea.searchRadius}m`);
+        }
+
+        return bestNode;
+    }
+
+    /**
+     * Get the runway entry node for line up and wait.
+     * This is a node ON the runway where the aircraft positions for takeoff.
+     */
+    public getRunwayEntryNode(runwayId: string): string | null {
+        // Runway entry points - position on the runway near the threshold
+        // where aircraft line up before takeoff
+        const runwayEntryPoints: Record<string, { lat: number; lon: number; searchRadius: number }> = {
+            // 16L entry - just past threshold on runway
+            '16L': { lat: 38.7265, lon: -77.5178, searchRadius: 150 },
+            // 34R entry - opposite end
+            '34R': { lat: 38.7150, lon: -77.5095, searchRadius: 150 },
+            // 16R entry
+            '16R': { lat: 38.7240, lon: -77.5195, searchRadius: 150 },
+            // 34L entry
+            '34L': { lat: 38.7160, lon: -77.5105, searchRadius: 150 }
+        };
+
+        const entryPoint = runwayEntryPoints[runwayId];
+        if (!entryPoint) {
+            console.warn(`[GraphManager] Unknown runway for entry: ${runwayId}`);
+            return null;
+        }
+
+        // Find the closest node within the search radius
+        let bestNode: string | null = null;
+        let bestDist = Infinity;
+
+        for (const node of this.nodes.values()) {
+            const dist = this.haversine(entryPoint.lat, entryPoint.lon, node.lat, node.lon);
+            if (dist < entryPoint.searchRadius && dist < bestDist) {
+                bestDist = dist;
+                bestNode = node.id;
+            }
+        }
+
+        if (bestNode) {
+            const node = this.nodes.get(bestNode);
+            console.log(`[GraphManager] Runway entry for ${runwayId}: ${bestNode} (${bestDist.toFixed(1)}m away) at ${node?.lat}, ${node?.lon}`);
+        } else {
+            console.warn(`[GraphManager] No runway entry node found for ${runwayId} within ${entryPoint.searchRadius}m`);
         }
 
         return bestNode;

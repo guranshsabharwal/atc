@@ -11,7 +11,7 @@ export const PositionSchema = z.object({
 });
 
 // Clearance Types
-export const ClearanceTypeSchema = z.enum(['NONE', 'TAXI', 'TAKEOFF', 'LAND', 'HOLD']);
+export const ClearanceTypeSchema = z.enum(['NONE', 'TAXI', 'TAKEOFF', 'LAND', 'HOLD', 'LINEUP', 'DEPARTED']);
 
 export const TaxiClearanceSchema = z.object({
     type: z.literal('TAXI'),
@@ -26,6 +26,8 @@ export const ClearanceSchema = z.union([
     z.object({ type: z.literal('TAKEOFF'), runwayId: z.string() }),
     z.object({ type: z.literal('LAND'), runwayId: z.string() }),
     z.object({ type: z.literal('HOLD') }), // Placeholder
+    z.object({ type: z.literal('LINEUP'), runwayId: z.string() }), // Line up and wait on runway
+    z.object({ type: z.literal('DEPARTED') }), // Aircraft has left the airspace
 ]);
 
 export const AircraftSchema = z.object({
@@ -86,12 +88,21 @@ export const DeleteAircraftCommandSchema = z.object({
     }),
 });
 
+export const LineUpAndWaitCommandSchema = z.object({
+    type: z.literal('lineUpAndWait'),
+    payload: z.object({
+        aircraftId: z.string(),
+        runwayId: z.string(),
+    }),
+});
+
 export const CommandSchema = z.discriminatedUnion('type', [
     SpawnAircraftCommandSchema,
     IssueTaxiClearanceCommandSchema,
     TakeoffClearanceCommandSchema,
     LandingClearanceCommandSchema,
     DeleteAircraftCommandSchema,
+    LineUpAndWaitCommandSchema,
 ]);
 
 // TypeScript Types
@@ -107,5 +118,6 @@ export type IssueTaxiClearanceCommand = z.infer<typeof IssueTaxiClearanceCommand
 export type TakeoffClearanceCommand = z.infer<typeof TakeoffClearanceCommandSchema>;
 export type LandingClearanceCommand = z.infer<typeof LandingClearanceCommandSchema>;
 export type DeleteAircraftCommand = z.infer<typeof DeleteAircraftCommandSchema>;
+export type LineUpAndWaitCommand = z.infer<typeof LineUpAndWaitCommandSchema>;
 export type Command = z.infer<typeof CommandSchema>;
 export { KHEF_GATES, type ParkingGate } from './airport';

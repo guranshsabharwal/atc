@@ -52,23 +52,38 @@ export class RunwayManager {
     }
 
     public setStatus(id: string, status: RunwayStatus, aircraftId?: string): boolean {
-        const rwy = this.runways.get(id);
-        if (!rwy) return false;
+        const updateSingle = (rId: string) => {
+            const rwy = this.runways.get(rId);
+            if (!rwy) return false;
 
-        // Basic conflict check
-        if (status === 'OCCUPIED' && rwy.status !== 'FREE' && rwy.occupiedBy !== aircraftId) {
-            console.warn(`[RunwayManager] Conflict: Cannot set ${id} to OCCUPIED by ${aircraftId} (curr: ${rwy.status} by ${rwy.occupiedBy})`);
-            return false;
+            // Basic conflict check
+            if (status === 'OCCUPIED' && rwy.status !== 'FREE' && rwy.occupiedBy !== aircraftId) {
+                console.warn(`[RunwayManager] Conflict: Cannot set ${rId} to OCCUPIED by ${aircraftId} (curr: ${rwy.status} by ${rwy.occupiedBy})`);
+                return false;
+            }
+
+            rwy.status = status;
+            if (status === 'FREE') {
+                rwy.occupiedBy = undefined;
+            } else if (aircraftId) {
+                rwy.occupiedBy = aircraftId;
+            }
+            return true;
+        };
+
+        if (!updateSingle(id)) return false;
+
+        // Update Reciprocal
+        const reciprocals: Record<string, string> = {
+            '16L': '34R', '34R': '16L',
+            '16R': '34L', '34L': '16R'
+        };
+        const recId = reciprocals[id];
+        if (recId) {
+            updateSingle(recId);
         }
 
-        rwy.status = status;
-        if (status === 'FREE') {
-            rwy.occupiedBy = undefined;
-        } else if (aircraftId) {
-            rwy.occupiedBy = aircraftId;
-        }
-
-        console.log(`[RunwayManager] Runway ${id} is now ${status} (Ac: ${aircraftId || 'None'})`);
+        console.log(`[RunwayManager] Runway ${id} (and reciprocal) is now ${status} (Ac: ${aircraftId || 'None'})`);
         return true;
     }
 
@@ -78,11 +93,12 @@ export class RunwayManager {
 
     public checkForIncursions(aircraft: Aircraft[]): string[] {
         const alerts: string[] = [];
-        const THRESHOLD_DEG2 = 0.0000005; // Approx 20-30 meters squared? Need to tune.
-        // 0.00005 deg ~ 5m. Square is 0.0000000025.
-        // Let's use a larger threshold for detection. 
-        // 0.0002 deg ~ 20m. Square = 0.00000004.
         const THRESHOLD = 0.00000004;
+
+        const reciprocals: Record<string, string> = {
+            '16L': '34R', '34R': '16L',
+            '16R': '34L', '34L': '16R'
+        };
 
         aircraft.forEach(ac => {
             this.geometry.forEach(geo => {
@@ -97,17 +113,21 @@ export class RunwayManager {
 
                 if (distSq < THRESHOLD) {
                     // Aircraft is ON this runway
-                    // Incursion if:
-                    // 1. Runway is FREE (Uncontrolled entry)
-                    // 2. Runway is OCCUPIED by SOMEONE ELSE
 
-                    // Case 1: FREE
+                    // Check if aircraft has valid clearance for this runway OR its reciprocal
+                    const hasClearance = (
+                        (ac.clearance?.type === 'TAKEOFF' || ac.clearance?.type === 'LINEUP' || ac.clearance?.type === 'LAND') &&
+                        (ac.clearance.runwayId === geo.id || ac.clearance.runwayId === reciprocals[geo.id])
+                    );
+
+                    if (hasClearance) {
+                        return; // Valid usage
+                    }
+
+                    // Incursion detection logic
                     if (rwy.status === 'FREE') {
-                        // TODO: Check if they have clearance? For now, raw check.
-                        // Ideally we check if ac.clearance matches.
                         alerts.push(`INCURSION! ${ac.callsign} entered active runway ${geo.id} without clearance!`);
                     }
-                    // Case 2: OCCUPIED
                     else if (rwy.status === 'OCCUPIED' && rwy.occupiedBy !== ac.id) {
                         alerts.push(`CRITICAL! ${ac.callsign} incursed on ${geo.id} occupied by ${rwy.occupiedBy}!`);
                     }

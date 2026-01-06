@@ -43,6 +43,7 @@ export default function Home() {
                         worldState={worldState}
                         onSpawn={handleSpawn}
                         onTaxi={(id, destRunway) => sendCommand('issueTaxiClearance', { aircraftId: id, destinationRunwayId: destRunway })}
+                        onLineUp={(id, runwayId) => sendCommand('lineUpAndWait', { aircraftId: id, runwayId: runwayId })}
                         onTakeoff={(id, runwayId) => sendCommand('takeoffClearance', { aircraftId: id, runwayId: runwayId })}
                         onLanding={(id, runwayId) => sendCommand('landingClearance', { aircraftId: id, runwayId: runwayId })}
                         onDelete={(id) => sendCommand('deleteAircraft', { aircraftId: id })}

@@ -10,7 +10,8 @@ vi.mock('./GraphManager', () => {
             findNearestNode(lat: number, lon: number) { return 'node1'; }
             getNode(id: string) { return { id, lat: 0, lon: 0 }; }
             getReachableNodes() { return ['node1', 'node2']; }
-            findPath(start: string, end: string) { return ['node1', 'node2']; }
+            findPath(start: string, end: string, options?: any) { return ['node1', 'node2']; }
+            getHoldShortNodeForRunway(runwayId: string) { return 'node2'; }
             // Helper for simple bearing calc if needed, or mocked return
             haversine() { return 100; }
         }
@@ -44,8 +45,8 @@ describe('Simulation Core', () => {
 
         expect(state.aircraft).toHaveLength(1);
         expect(state.aircraft[0].callsign).toBe('TEST1');
-        // Because of the mock, it snaps to 'node1' which has lat=0, lon=0
-        expect(state.aircraft[0].position.lat).toBe(0);
+        // Position is kept as provided since we don't snap to graph during spawn
+        expect(state.aircraft[0].position.lat).toBe(10);
     });
 
     test('issueTaxiClearance updates aircraft clearance and route', () => {
@@ -60,12 +61,12 @@ describe('Simulation Core', () => {
 
         const acId = sim.getState().aircraft[0].id;
 
-        // Issue clearance
+        // Issue clearance - now uses destinationRunwayId instead of destinationNodeId
         const cmd: IssueTaxiClearanceCommand = {
             type: 'issueTaxiClearance',
             payload: {
                 aircraftId: acId,
-                destinationNodeId: 'node2'
+                destinationRunwayId: '16L'
             }
         };
 

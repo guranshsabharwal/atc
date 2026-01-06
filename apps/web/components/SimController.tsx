@@ -12,6 +12,7 @@ interface SimControllerProps {
     worldState: WorldState | null;
     onSpawn: (callsign: string, gateId?: string) => void;
     onTaxi?: (aircraftId: string, destinationRunwayId: string) => void;
+    onLineUp?: (aircraftId: string, runwayId: string) => void;
     onTakeoff?: (aircraftId: string, runwayId: string) => void;
     onLanding?: (aircraftId: string, runwayId: string) => void;
     onDelete?: (aircraftId: string) => void;
@@ -22,6 +23,7 @@ export default function SimController({
     worldState,
     onSpawn,
     onTaxi,
+    onLineUp,
     onTakeoff,
     onLanding,
     onDelete
@@ -150,8 +152,23 @@ export default function SimController({
                                     <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => onTaxi && onTaxi(ac.id, taxiDestination)}>
                                         Taxi
                                     </Button>
-                                    <Button size="sm" variant="default" className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => onTakeoff && onTakeoff(ac.id, selectedRunway)}>
-                                        Takeoff {selectedRunway}
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="h-6 text-[10px] px-2"
+                                        disabled={ac.clearance?.type !== 'HOLD'}
+                                        onClick={() => onLineUp && onLineUp(ac.id, selectedRunway)}
+                                    >
+                                        Line Up
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="default"
+                                        className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white"
+                                        disabled={ac.clearance?.type !== 'LINEUP'}
+                                        onClick={() => onTakeoff && onTakeoff(ac.id, selectedRunway)}
+                                    >
+                                        Takeoff
                                     </Button>
                                     <Button size="sm" variant="destructive" className="h-6 text-[10px] px-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onDelete && onDelete(ac.id)}>
                                         ×

@@ -34,7 +34,7 @@ describe('Shared Schemas', () => {
             type: 'issueTaxiClearance',
             payload: {
                 aircraftId: '123',
-                destinationNodeId: 'node_456'
+                destinationRunwayId: '16L'
             }
         };
         expect(IssueTaxiClearanceCommandSchema.safeParse(cmd).success).toBe(true);
