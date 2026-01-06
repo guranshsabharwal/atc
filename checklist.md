@@ -221,7 +221,7 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 
 ## 5.2 Tower clearances (structured)
 - [x] Implement:
-  - [ ] `lineUpAndWait(runway, intersection?)`
+  - [x] `lineUpAndWait(runway, intersection?)`
   - [x] `clearedForTakeoff(runway, restrictions?)`
   - [x] `clearedToLand(runway, restrictions?)`
 - [ ] Add basic separation rules (time/distance based, simplified).
@@ -234,14 +234,14 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 
 **Deliverables**
 - [ ] Complete VFR pattern scenario without conflicts
-- [ ] Runway incursion warning fires when violated
+- [x] Runway incursion warning fires when violated
 
 ## Known Issues (to fix before Phase 6)
-- [ ] **Pathfinding uses runways for taxi** - Aircraft taxi routes go ON runways instead of taxiways only
-- [ ] **Hold short positions not exact** - Aircraft stops near but not exactly at runway threshold
-- [ ] **Taxi to 34L fails** - No path found from TERMINAL to 34L hold short
-- [ ] **No runway crossing logic** - To reach 16R from east side, should hold short of 16L first
-- [ ] **Hold short position not aligned with runway** - Aircraft may need to reposition before takeoff
+- [x] **Pathfinding uses runways for taxi** - Taxi logic now restricts runway usage
+- [x] **Hold short positions not exact** - Fixed using tagged graph nodes
+- [x] **Taxi to 34L fails** - Fixed graph connectivity
+- [ ] **No runway crossing logic** - Logic to stop at intermediate hold shorts needed
+- [x] **Hold short position not aligned with runway** - Fixed via Line Up command
 
 ---
 
