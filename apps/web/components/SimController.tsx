@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { WorldState, Aircraft, KHEF_GATES } from "@atc/shared";
+import { WorldState, Aircraft, KHEF_GATES, ControllerPosition } from "@atc/shared";
 import { Button } from "@/components/ui/button";
 
 // KHEF Runways
@@ -16,6 +16,11 @@ interface SimControllerProps {
     onTakeoff?: (aircraftId: string, runwayId: string) => void;
     onLanding?: (aircraftId: string, runwayId: string) => void;
     onDelete?: (aircraftId: string) => void;
+    // Phase 6: Air commands
+    onVector?: (aircraftId: string, heading: number) => void;
+    onAltitude?: (aircraftId: string, altitude: number, isClimb: boolean) => void;
+    onSpeed?: (aircraftId: string, speed: number) => void;
+    onHandoff?: (aircraftId: string, toController: ControllerPosition) => void;
 }
 
 export default function SimController({
@@ -26,11 +31,17 @@ export default function SimController({
     onLineUp,
     onTakeoff,
     onLanding,
-    onDelete
+    onDelete,
+    onVector,
+    onAltitude,
+    onSpeed,
+    onHandoff
 }: SimControllerProps) {
     const [callsign, setCallsign] = useState("UAL123");
     const [selectedGate, setSelectedGate] = useState(KHEF_GATES[0].id);
     const [taxiDestination, setTaxiDestination] = useState(KHEF_RUNWAYS[0]);
+    const [vectorHeading, setVectorHeading] = useState(180);
+    const [assignedAltitude, setAssignedAltitude] = useState(3000);
 
     const handleSpawn = () => {
         onSpawn(callsign, selectedGate);
@@ -184,6 +195,101 @@ export default function SimController({
                     ))}
                 </div>
             </div>
+
+            {/* Phase 6: Air Traffic Control */}
+            {worldState?.aircraft?.some(ac => ac.flightPhase && ac.flightPhase !== 'GROUND') && (
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-green-600 uppercase tracking-wider">Air Traffic</h3>
+
+                    {/* Heading/Altitude Input */}
+                    <div className="grid grid-cols-2 gap-2 p-2 bg-green-500/5 rounded-lg border border-green-500/20">
+                        <div>
+                            <label className="text-[10px] font-medium text-muted-foreground">Vector HDG</label>
+                            <input
+                                type="number"
+                                className="flex h-7 w-full rounded border border-input bg-background px-2 text-xs"
+                                value={vectorHeading}
+                                onChange={e => setVectorHeading(parseInt(e.target.value) || 0)}
+                                min={0}
+                                max={360}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-medium text-muted-foreground">Altitude (ft)</label>
+                            <input
+                                type="number"
+                                className="flex h-7 w-full rounded border border-input bg-background px-2 text-xs"
+                                value={assignedAltitude}
+                                onChange={e => setAssignedAltitude(parseInt(e.target.value) || 0)}
+                                step={1000}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Airborne Aircraft List */}
+                    <div className="space-y-2">
+                        {worldState.aircraft.filter(ac => ac.flightPhase && ac.flightPhase !== 'GROUND').map((ac: Aircraft) => (
+                            <div key={ac.id} className="p-2 border border-green-500/30 rounded-lg bg-green-500/5">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="font-mono font-bold text-sm text-green-700 dark:text-green-400">{ac.callsign}</span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-700 dark:text-green-300 font-medium">
+                                        {ac.controllerId || 'NONE'}
+                                    </span>
+                                </div>
+
+                                {/* Flight info */}
+                                <div className="text-[10px] text-muted-foreground font-mono flex gap-3 mb-2">
+                                    <span>FL{Math.round(ac.position.alt / 100)}</span>
+                                    <span>HDG {Math.round(ac.position.heading)}°</span>
+                                    <span>{Math.round(ac.speed)}kts</span>
+                                </div>
+
+                                {/* Air Controls */}
+                                <div className="flex flex-wrap gap-1">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 text-[10px] px-2"
+                                        onClick={() => onVector && onVector(ac.id, vectorHeading)}
+                                    >
+                                        Vector {vectorHeading}°
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 text-[10px] px-2"
+                                        onClick={() => onAltitude && onAltitude(ac.id, assignedAltitude, assignedAltitude > ac.position.alt)}
+                                    >
+                                        {assignedAltitude > ac.position.alt ? '↑' : '↓'} {assignedAltitude}
+                                    </Button>
+
+                                    {/* Handoff buttons */}
+                                    {ac.controllerId !== 'APPROACH' && (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-6 text-[10px] px-2"
+                                            onClick={() => onHandoff && onHandoff(ac.id, 'APPROACH')}
+                                        >
+                                            → APP
+                                        </Button>
+                                    )}
+                                    {ac.controllerId !== 'TOWER' && (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-6 text-[10px] px-2"
+                                            onClick={() => onHandoff && onHandoff(ac.id, 'TOWER')}
+                                        >
+                                            → TWR
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

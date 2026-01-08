@@ -7,20 +7,29 @@ import {
     LandingClearanceCommand,
     DeleteAircraftCommand,
     LineUpAndWaitCommand,
+    VectorCommand,
+    DirectToCommand,
+    AltitudeCommand,
+    SpeedCommand,
+    HandoffCommand,
     Aircraft,
-    KHEF_GATES
+    KHEF_GATES,
+    ControllerPosition
 } from '@atc/shared';
 import { GraphManager } from './GraphManager';
 import { RunwayManager } from './RunwayManager';
+import { AirNavigationManager } from './AirNavigationManager';
 
 export class Simulation {
     private state: WorldState;
     private graph: GraphManager;
     private runwayManager: RunwayManager;
+    private airNav: AirNavigationManager;
 
     constructor() {
         this.graph = new GraphManager();
         this.runwayManager = new RunwayManager();
+        this.airNav = new AirNavigationManager();
         this.state = {
             aircraft: [],
             runways: [],
@@ -47,6 +56,16 @@ export class Simulation {
             this.deleteAircraft(cmd as DeleteAircraftCommand);
         } else if (cmd.type === 'lineUpAndWait') {
             this.handleLineUpAndWait(cmd as LineUpAndWaitCommand);
+        } else if (cmd.type === 'vector') {
+            this.handleVector(cmd as VectorCommand);
+        } else if (cmd.type === 'directTo') {
+            this.handleDirectTo(cmd as DirectToCommand);
+        } else if (cmd.type === 'altitude') {
+            this.handleAltitude(cmd as AltitudeCommand);
+        } else if (cmd.type === 'speed') {
+            this.handleSpeed(cmd as SpeedCommand);
+        } else if (cmd.type === 'handoff') {
+            this.handleHandoff(cmd as HandoffCommand);
         }
     }
 
@@ -271,7 +290,109 @@ export class Simulation {
         this.runwayManager.occupyRunway(runwayId, ac.id);
     }
 
+    // Phase 6: Air Navigation Command Handlers
+
+    private handleVector(cmd: VectorCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!ac) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for vector`);
+            return;
+        }
+
+        // Only allow vector for airborne aircraft
+        if (ac.flightPhase === 'GROUND') {
+            console.warn(`[Sim] Cannot issue vector to ground aircraft ${ac.callsign}`);
+            return;
+        }
+
+        ac.clearance = { type: 'VECTOR', heading: cmd.payload.heading };
+        ac.targetHeading = cmd.payload.heading;
+        console.log(`[Sim] Aircraft ${ac.callsign} vectored to heading ${cmd.payload.heading}`);
+    }
+
+    private handleDirectTo(cmd: DirectToCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!ac) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for direct-to`);
+            return;
+        }
+
+        if (ac.flightPhase === 'GROUND') {
+            console.warn(`[Sim] Cannot issue direct-to to ground aircraft ${ac.callsign}`);
+            return;
+        }
+
+        ac.clearance = {
+            type: 'DIRECT_TO',
+            fixId: cmd.payload.fixId,
+            fixLat: cmd.payload.fixLat,
+            fixLon: cmd.payload.fixLon
+        };
+        console.log(`[Sim] Aircraft ${ac.callsign} proceeding direct to ${cmd.payload.fixId}`);
+    }
+
+    private handleAltitude(cmd: AltitudeCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!ac) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for altitude`);
+            return;
+        }
+
+        if (ac.flightPhase === 'GROUND') {
+            console.warn(`[Sim] Cannot issue altitude to ground aircraft ${ac.callsign}`);
+            return;
+        }
+
+        const clearanceType = cmd.payload.isClimb ? 'CLIMB' : 'DESCEND';
+        ac.clearance = { type: clearanceType, altitude: cmd.payload.altitude };
+        ac.targetAltitude = cmd.payload.altitude;
+        console.log(`[Sim] Aircraft ${ac.callsign} ${clearanceType.toLowerCase()} to ${cmd.payload.altitude} ft`);
+    }
+
+    private handleSpeed(cmd: SpeedCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!ac) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for speed`);
+            return;
+        }
+
+        if (ac.flightPhase === 'GROUND') {
+            console.warn(`[Sim] Cannot issue speed to ground aircraft ${ac.callsign}`);
+            return;
+        }
+
+        ac.clearance = { type: 'SPEED', speed: cmd.payload.speed };
+        ac.targetSpeed = cmd.payload.speed;
+        console.log(`[Sim] Aircraft ${ac.callsign} speed assigned: ${cmd.payload.speed} kts`);
+    }
+
+    private handleHandoff(cmd: HandoffCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!ac) {
+            console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for handoff`);
+            return;
+        }
+
+        const previousController = ac.controllerId || 'unassigned';
+        ac.controllerId = cmd.payload.toController;
+
+        // Update flight phase based on controller
+        if (cmd.payload.toController === 'APPROACH') {
+            ac.flightPhase = 'APPROACH';
+        } else if (cmd.payload.toController === 'DEPARTURE') {
+            ac.flightPhase = 'DEPARTURE';
+        }
+
+        console.log(`[Sim] Aircraft ${ac.callsign} handed off from ${previousController} to ${cmd.payload.toController}`);
+    }
+
     private updatePhysics(ac: Aircraft, dt: number): Aircraft {
+        // Phase 6: Handle airborne aircraft separately
+        if (ac.flightPhase && ac.flightPhase !== 'GROUND') {
+            return this.updateAirbornePhysics(ac, dt);
+        }
+
+        // Ground movement physics (existing logic)
         // Handle speed updates based on state
         if (ac.clearance?.type === 'TAKEOFF') {
             // Accelerate to takeoff speed
@@ -283,18 +404,22 @@ export class Simulation {
 
         if (!ac.route || ac.targetIndex === undefined || ac.targetIndex >= ac.route.length) {
             if (ac.speed > 0) {
-                // If we finished the route during TAKEOFF, aircraft has departed
+                // If we finished the route during TAKEOFF, aircraft becomes airborne
                 if (ac.clearance?.type === 'TAKEOFF') {
-                    console.log(`[Sim] Aircraft ${ac.callsign} has departed!`);
+                    console.log(`[Sim] Aircraft ${ac.callsign} is now airborne!`);
 
                     // Release the runway
                     this.runwayManager.releaseRunway(ac.clearance.runwayId);
 
-                    // Mark as departed
+                    // Transition to airborne state
                     return {
                         ...ac,
-                        speed: 0,
-                        clearance: { type: 'DEPARTED' },
+                        speed: 180, // Initial airborne speed
+                        position: { ...ac.position, alt: 1000 }, // Initial altitude
+                        flightPhase: 'DEPARTURE',
+                        controllerId: 'DEPARTURE',
+                        targetAltitude: 3000, // Default initial climb
+                        targetSpeed: 200,
                         route: [],
                     };
                 }
@@ -384,5 +509,93 @@ export class Simulation {
         const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
+    }
+
+    // Phase 6: Airborne aircraft physics
+    private updateAirbornePhysics(ac: Aircraft, dt: number): Aircraft {
+        let newHeading = ac.position.heading;
+        let newAlt = ac.position.alt;
+        let newSpeed = ac.speed;
+        let newVerticalRate = ac.verticalRate || 0;
+
+        // Update heading based on clearance
+        if (ac.clearance?.type === 'VECTOR' && ac.targetHeading !== undefined) {
+            newHeading = this.airNav.updateHeading(
+                ac.position.heading,
+                ac.targetHeading,
+                dt
+            );
+        } else if (ac.clearance?.type === 'DIRECT_TO') {
+            // Calculate bearing to fix
+            const bearingToFix = this.airNav.bearingToFix(
+                ac.position.lat, ac.position.lon,
+                ac.clearance.fixLat, ac.clearance.fixLon
+            );
+            newHeading = this.airNav.updateHeading(ac.position.heading, bearingToFix, dt);
+
+            // Check if reached fix
+            if (this.airNav.hasReachedFix(
+                ac.position.lat, ac.position.lon,
+                ac.clearance.fixLat, ac.clearance.fixLon
+            )) {
+                console.log(`[Sim] Aircraft ${ac.callsign} reached ${ac.clearance.fixId}`);
+                // Clear the direct-to clearance
+                ac.clearance = { type: 'NONE' };
+            }
+        }
+
+        // Update altitude
+        if (ac.targetAltitude !== undefined && ac.targetAltitude !== ac.position.alt) {
+            const altResult = this.airNav.updateAltitude(
+                ac.position.alt,
+                ac.targetAltitude,
+                newVerticalRate,
+                dt
+            );
+            newAlt = altResult.altitude;
+            newVerticalRate = altResult.verticalRate;
+        } else {
+            newVerticalRate = 0;
+        }
+
+        // Update speed
+        if (ac.targetSpeed !== undefined && ac.targetSpeed !== ac.speed) {
+            newSpeed = this.airNav.updateSpeed(ac.speed, ac.targetSpeed, dt);
+        }
+
+        // Move forward based on current heading and speed
+        const newPos = this.airNav.moveForward(
+            ac.position.lat,
+            ac.position.lon,
+            newHeading,
+            newSpeed,
+            dt
+        );
+
+        // Check if aircraft is out of range (simplified: 50nm from KHEF)
+        const distFromAirport = this.airNav.distanceToFix(
+            newPos.lat, newPos.lon,
+            38.7214, -77.5154 // KHEF center
+        );
+
+        if (distFromAirport > 50) {
+            console.log(`[Sim] Aircraft ${ac.callsign} left airspace (${distFromAirport.toFixed(1)} nm)`);
+            return {
+                ...ac,
+                clearance: { type: 'DEPARTED' }
+            };
+        }
+
+        return {
+            ...ac,
+            position: {
+                lat: newPos.lat,
+                lon: newPos.lon,
+                alt: newAlt,
+                heading: newHeading
+            },
+            speed: newSpeed,
+            verticalRate: newVerticalRate
+        };
     }
 }
