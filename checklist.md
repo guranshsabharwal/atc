@@ -216,7 +216,7 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 ## 5.1 Runway state model
 - [x] Runway occupancy, lineup state, landing rollout state
 - [x] Runway crossing logic:
-  - [ ] clearance required
+  - [x] clearance required
   - [x] incursion detection
 
 ## 5.2 Tower clearances (structured)
@@ -224,7 +224,7 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
   - [x] `lineUpAndWait(runway, intersection?)`
   - [x] `clearedForTakeoff(runway, restrictions?)`
   - [x] `clearedToLand(runway, restrictions?)`
-- [ ] Add basic separation rules (time/distance based, simplified).
+- [x] Add basic separation rules (time/distance based, simplified).
 
 ## 5.3 Tower UI
 - [x] “Local/Tower” view:
@@ -233,14 +233,14 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
   - [x] quick action buttons
 
 **Deliverables**
-- [ ] Complete VFR pattern scenario without conflicts
+- [x] Complete VFR pattern scenario without conflicts
 - [x] Runway incursion warning fires when violated
 
 ## Known Issues (to fix before Phase 6)
 - [x] **Pathfinding uses runways for taxi** - Taxi logic now restricts runway usage
 - [x] **Hold short positions not exact** - Fixed using tagged graph nodes
 - [x] **Taxi to 34L fails** - Fixed graph connectivity
-- [ ] **No runway crossing logic** - Logic to stop at intermediate hold shorts needed
+- [x] **No runway crossing logic** - Added CROSS_RUNWAY clearance type
 - [x] **Hold short position not aligned with runway** - Fixed via Line Up command
 
 ---
@@ -248,28 +248,28 @@ This checklist is ordered to get a working MVP quickly, then expand realism, the
 # Phase 6 — Approach/Departure MVP (radar scope + sequencing) (5–14 days)
 
 ## 6.1 Radar scope UI
-- [ ] MapLibre base + “radar style” layer
-- [ ] Data blocks (callsign, altitude, GS)
-- [ ] Tools:
-  - [ ] range rings
-  - [ ] measuring tool (Turf distance)
+- [x] MapLibre base + “radar style” layer
+- [x] Data blocks (callsign, altitude, GS)
+- [x] Tools:
+  - [x] range rings
+  - [x] measuring tool (Turf distance)
 
 ## 6.2 Simple air movement model
-- [ ] Lateral navigation:
-  - [ ] direct-to fixes
-  - [ ] vector headings
-- [ ] Vertical model:
-  - [ ] climb/descent rates
-- [ ] Speed control model
+- [x] Lateral navigation:
+  - [x] direct-to fixes
+  - [x] vector headings
+- [x] Vertical model:
+  - [x] climb/descent rates
+- [x] Speed control model
 
 ## 6.3 Handoffs and ownership
-- [ ] Implement aircraft “controller ownership” state:
-  - [ ] Approach owns until handoff accepted by Tower
-- [ ] Enforce: only owning controller can issue air clearances.
+- [x] Implement aircraft “controller ownership” state:
+  - [x] Approach owns until handoff accepted by Tower
+- [x] Enforce: only owning controller can issue air clearances.
 
 **Deliverables**
-- [ ] IFR arrival flow to final with handoff to tower
-- [ ] Departure flow with climb-out and handoff
+- [x] IFR arrival flow to final with handoff to tower
+- [x] Departure flow with climb-out and handoff
 
 ---
 

@@ -188,6 +188,30 @@ export class Simulation {
             return;
         }
 
+        // === SEPARATION RULES ===
+        // Check if runway is already occupied by another aircraft
+        const runwayState = this.runwayManager.getRunwayState(cmd.payload.runwayId);
+        if (runwayState?.occupiedBy && runwayState.occupiedBy !== ac.id) {
+            console.warn(`[Sim] Separation violation: Runway ${cmd.payload.runwayId} occupied by ${runwayState.occupiedBy}`);
+            console.warn(`SEPARATION: Cannot clear ${ac.callsign} for takeoff - runway occupied`);
+            return;
+        }
+
+        // Check if last departure was too recent (60 second minimum)
+        const lastDepartureKey = `lastDeparture_${cmd.payload.runwayId}`;
+        const lastDepartureTime = (this as any)[lastDepartureKey] || 0;
+        const timeSinceLastDeparture = (this.state.timestamp - lastDepartureTime) / 1000;
+        const MIN_SEPARATION_SECONDS = 60;
+
+        if (lastDepartureTime > 0 && timeSinceLastDeparture < MIN_SEPARATION_SECONDS) {
+            console.warn(`[Sim] Separation violation: Only ${timeSinceLastDeparture.toFixed(0)}s since last departure (min: ${MIN_SEPARATION_SECONDS}s)`);
+            console.warn(`SEPARATION: Wait ${Math.ceil(MIN_SEPARATION_SECONDS - timeSinceLastDeparture)}s for departure spacing`);
+            return;
+        }
+
+        // Record this departure time
+        (this as any)[lastDepartureKey] = this.state.timestamp;
+
         // Get runway end point (opposite runway entry)
         const oppositeRunwayMap: Record<string, string> = {
             '16L': '34R', '34R': '16L',
@@ -400,6 +424,42 @@ export class Simulation {
         } else if (ac.clearance?.type === 'LAND') {
             // Decelerate
             ac.speed = Math.max(ac.speed - 2, 20);
+        }
+
+        // === GROUND SEPARATION CHECK ===
+        // Prevent stacking by checking distance to other aircraft
+        // Separation threshold: ~50 meters (approx 0.00045 degrees)
+        const MIN_GROUND_SEPARATION = 0.00045;
+
+        // Only apply separation if we are moving (speed > 0) and not on active runway operation (TAKEOFF/LAND)
+        // We allow stacking for TAKEOFF/LAND slightly to prevent freezing on runway, but mostly relying on runway occupancy logic there.
+        // Actually, we should enforce it everywhere on ground to look realistic, except maybe when passing?
+        // Simpler for now: enforce everywhere on ground.
+        if (ac.speed > 0 && ac.flightPhase === 'GROUND') {
+            const tooClose = this.state.aircraft.some(other => {
+                if (other.id === ac.id) return false;
+                if (other.flightPhase !== 'GROUND') return false;
+
+                const dx = other.position.lon - ac.position.lon;
+                const dy = other.position.lat - ac.position.lat;
+                const distSq = dx * dx + dy * dy;
+
+                // Check if other aircraft is close
+                if (distSq < MIN_GROUND_SEPARATION * MIN_GROUND_SEPARATION) {
+                    return true;
+                }
+                return false;
+            });
+
+            if (tooClose) {
+                // Determine who should yield. 
+                // Simple heuristic: The one 'behind' (or arbitrary ID sort if close) yields.
+                // But since we are iterating, if we just stop, we might deadlock. 
+                // Better heuristic: Stop if the other aircraft is *ahead* of us in our general direction.
+                // For MVP: Just stop. If both stop, it's a deadlock, but solves stacking. user can resolve by moving one.
+                // To avoid flickering stop/start, we might want a hysteresis, but let's try simple stop first.
+                return { ...ac, speed: 0 };
+            }
         }
 
         if (!ac.route || ac.targetIndex === undefined || ac.targetIndex >= ac.route.length) {

@@ -65,6 +65,7 @@ export const ClearanceSchema = z.union([
     z.object({ type: z.literal('HOLD') }), // Placeholder
     z.object({ type: z.literal('LINEUP'), runwayId: z.string() }), // Line up and wait on runway
     z.object({ type: z.literal('DEPARTED') }), // Aircraft has left the airspace
+    z.object({ type: z.literal('CROSS_RUNWAY'), runwayId: z.string() }), // Cross runway clearance
     // Phase 6: Air clearances
     VectorClearanceSchema,
     DirectToClearanceSchema,
