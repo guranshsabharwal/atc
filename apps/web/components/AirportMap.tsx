@@ -381,7 +381,7 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                     <span className="text-sm font-medium">Loading Map...</span>
                 </div>
             )}
-            <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-3 rounded shadow-md z-10 flex flex-col gap-2 text-sm border">
+            <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur p-3 rounded shadow-md z-10 flex flex-col gap-2 text-sm border">
                 <h4 className="font-semibold mb-1">Map Layers</h4>
                 <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={showLayout} onChange={e => setShowLayout(e.target.checked)} className="rounded" />

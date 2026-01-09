@@ -264,7 +264,18 @@ export class Simulation {
     private deleteAircraft(cmd: DeleteAircraftCommand) {
         const index = this.state.aircraft.findIndex(a => a.id === cmd.payload.aircraftId);
         if (index !== -1) {
-            console.log(`[Sim] Deleted aircraft ${this.state.aircraft[index].callsign}`);
+            const ac = this.state.aircraft[index];
+
+            // Release runway if aircraft was on one (LINEUP or TAKEOFF clearance)
+            if (ac.clearance?.type === 'LINEUP' || ac.clearance?.type === 'TAKEOFF') {
+                const runwayId = ac.clearance.runwayId;
+                if (runwayId) {
+                    console.log(`[Sim] Releasing runway ${runwayId} for deleted aircraft ${ac.callsign}`);
+                    this.runwayManager.releaseRunway(runwayId);
+                }
+            }
+
+            console.log(`[Sim] Deleted aircraft ${ac.callsign}`);
             this.state.aircraft.splice(index, 1);
         } else {
             console.warn(`[Sim] Aircraft ${cmd.payload.aircraftId} not found for deletion`);

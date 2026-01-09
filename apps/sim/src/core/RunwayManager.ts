@@ -93,7 +93,10 @@ export class RunwayManager {
 
     public checkForIncursions(aircraft: Aircraft[]): string[] {
         const alerts: string[] = [];
-        const THRESHOLD = 0.00000004;
+        // Threshold for runway proximity check
+        // 0.00000002 in lat/lon squared ≈ ~15 meters from runway centerline
+        // Runways are typically 30m wide, so this detects aircraft actually ON the runway
+        const THRESHOLD = 0.00000002;
 
         const reciprocals: Record<string, string> = {
             '16L': '34R', '34R': '16L',
@@ -101,6 +104,21 @@ export class RunwayManager {
         };
 
         aircraft.forEach(ac => {
+            // Skip aircraft that are at hold short (HOLD clearance) - they're allowed to be near runway
+            if (ac.clearance?.type === 'HOLD') {
+                return;
+            }
+
+            // Skip aircraft with TAXI clearance - they may taxi near runways
+            if (ac.clearance?.type === 'TAXI') {
+                return;
+            }
+
+            // Skip airborne aircraft
+            if (ac.flightPhase && ac.flightPhase !== 'GROUND') {
+                return;
+            }
+
             this.geometry.forEach(geo => {
                 const rwy = this.runways.get(geo.id);
                 if (!rwy) return;

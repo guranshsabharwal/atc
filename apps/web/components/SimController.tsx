@@ -96,16 +96,56 @@ export default function SimController({
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Tower Control</h3>
                 <div className="p-3 border rounded-lg bg-card space-y-3">
                     <div className="grid gap-1.5">
-                        <label className="text-xs font-medium">Active Runway</label>
-                        <select
-                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            value={selectedRunway}
-                            onChange={e => setSelectedRunway(e.target.value)}
-                        >
-                            {KHEF_RUNWAYS.map(rwy => (
-                                <option key={rwy} value={rwy}>{rwy}</option>
-                            ))}
-                        </select>
+                        <label className="text-xs font-medium">Active Runways</label>
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] text-muted-foreground w-8">South:</span>
+                                {['16L', '16R'].map(rwy => (
+                                    <label key={rwy} className="flex items-center gap-1 text-xs cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedRunway.includes(rwy)}
+                                            onChange={e => {
+                                                if (e.target.checked) {
+                                                    // Add runway, clear opposite direction
+                                                    const cleared = selectedRunway.split(',').filter(r => r.startsWith('16') && r !== '');
+                                                    setSelectedRunway([...cleared, rwy].join(','));
+                                                } else {
+                                                    // Remove runway
+                                                    setSelectedRunway(selectedRunway.split(',').filter(r => r !== rwy).join(',') || '16L');
+                                                }
+                                            }}
+                                            className="rounded w-3 h-3"
+                                        />
+                                        {rwy}
+                                    </label>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] text-muted-foreground w-8">North:</span>
+                                {['34L', '34R'].map(rwy => (
+                                    <label key={rwy} className="flex items-center gap-1 text-xs cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedRunway.includes(rwy)}
+                                            onChange={e => {
+                                                if (e.target.checked) {
+                                                    // Add runway, clear opposite direction
+                                                    const cleared = selectedRunway.split(',').filter(r => r.startsWith('34') && r !== '');
+                                                    setSelectedRunway([...cleared, rwy].join(','));
+                                                } else {
+                                                    // Remove runway
+                                                    setSelectedRunway(selectedRunway.split(',').filter(r => r !== rwy).join(',') || '16L');
+                                                }
+                                            }}
+                                            className="rounded w-3 h-3"
+                                        />
+                                        {rwy}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">First selected runway used for Line Up/Takeoff</p>
                     </div>
                 </div>
             </div>

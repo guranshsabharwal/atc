@@ -416,15 +416,18 @@ export class GraphManager {
     public getHoldShortNodeForRunway(runwayId: string): string | null {
         // Runway hold short areas - specific taxiway nodes near runway thresholds
         // These are the exact intersection points of taxiways with runway hold short lines
+        // Based on runway geometry from RunwayManager:
+        //   16L/34R (East): Start 38.7291,-77.5218 → End 38.7126,-77.5074
+        //   16R/34L (West): Start 38.7277,-77.5235 → End 38.7152,-77.5126
         const holdShortAreas: Record<string, { lat: number; lon: number; searchRadius: number }> = {
-            // 16L - where taxiway A meets the 16L threshold (north end)
+            // 16L - north end of EAST runway, near taxiway A intersection
             '16L': { lat: 38.7277, lon: -77.5185, searchRadius: 100 },
-            // 34R - south end of same runway
-            '34R': { lat: 38.7138, lon: -77.5088, searchRadius: 100 },
-            // 16R - where taxiway meets 16R threshold (west runway, north end)  
-            '16R': { lat: 38.7252, lon: -77.5200, searchRadius: 100 },
-            // 34L - south end of west runway
-            '34L': { lat: 38.7145, lon: -77.5095, searchRadius: 100 }
+            // 34R - south end of EAST runway, B6 taxiway intersection (from graph: -77.507405,38.713260)
+            '34R': { lat: 38.7133, lon: -77.5074, searchRadius: 100 },
+            // 16R - north end of WEST runway, at A1 (BEFORE the runway, not on it)
+            '16R': { lat: 38.7268, lon: -77.5215, searchRadius: 80 },
+            // 34L - south end of WEST runway (near A5 intersection)
+            '34L': { lat: 38.7155, lon: -77.5135, searchRadius: 150 }
         };
 
         const holdArea = holdShortAreas[runwayId];
@@ -462,15 +465,19 @@ export class GraphManager {
     public getRunwayEntryNode(runwayId: string): string | null {
         // Runway entry points - position on the runway near the threshold
         // where aircraft line up before takeoff
+        // These should be ON the runway, just past the hold short line
+        // Using actual runway node coordinates from graph.json:
+        //   16L/34R (East) runway nodes run from 38.7129 to 38.7288
+        //   16R/34L (West) runway nodes run from ~38.7178 to 38.7266
         const runwayEntryPoints: Record<string, { lat: number; lon: number; searchRadius: number }> = {
-            // 16L entry - just past threshold on runway
-            '16L': { lat: 38.7265, lon: -77.5178, searchRadius: 150 },
-            // 34R entry - opposite end
-            '34R': { lat: 38.7150, lon: -77.5095, searchRadius: 150 },
-            // 16R entry
-            '16R': { lat: 38.7240, lon: -77.5195, searchRadius: 150 },
-            // 34L entry
-            '34L': { lat: 38.7160, lon: -77.5105, searchRadius: 150 }
+            // 16L entry - north end of EAST runway threshold
+            '16L': { lat: 38.7285, lon: -77.5210, searchRadius: 100 },
+            // 34R entry - south end of EAST runway (graph node: -77.508112,38.712879)
+            '34R': { lat: 38.7129, lon: -77.5081, searchRadius: 100 },
+            // 16R entry - north end of WEST runway (graph node: -77.521016,38.726647)
+            '16R': { lat: 38.7266, lon: -77.5210, searchRadius: 100 },
+            // 34L entry - south end of WEST runway  
+            '34L': { lat: 38.7155, lon: -77.5128, searchRadius: 150 }
         };
 
         const entryPoint = runwayEntryPoints[runwayId];
