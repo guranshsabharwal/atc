@@ -208,7 +208,7 @@ export default function SimController({
                                         variant="secondary"
                                         className="h-6 text-[10px] px-2"
                                         disabled={ac.clearance?.type !== 'HOLD'}
-                                        onClick={() => onLineUp && onLineUp(ac.id, selectedRunway)}
+                                        onClick={() => onLineUp && onLineUp(ac.id, selectedRunway.split(',')[0])}
                                     >
                                         Line Up
                                     </Button>
@@ -217,7 +217,7 @@ export default function SimController({
                                         variant="default"
                                         className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white"
                                         disabled={ac.clearance?.type !== 'LINEUP'}
-                                        onClick={() => onTakeoff && onTakeoff(ac.id, selectedRunway)}
+                                        onClick={() => onTakeoff && onTakeoff(ac.id, selectedRunway.split(',')[0])}
                                     >
                                         Takeoff
                                     </Button>

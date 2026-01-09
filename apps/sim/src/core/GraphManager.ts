@@ -423,11 +423,11 @@ export class GraphManager {
             // 16L - north end of EAST runway, near taxiway A intersection
             '16L': { lat: 38.7277, lon: -77.5185, searchRadius: 100 },
             // 34R - south end of EAST runway, B6 taxiway intersection (from graph: -77.507405,38.713260)
-            '34R': { lat: 38.7133, lon: -77.5074, searchRadius: 100 },
+            '34R': { lat: 38.7133, lon: -77.5074, searchRadius: 200 },
             // 16R - north end of WEST runway, at A1 (BEFORE the runway, not on it)
             '16R': { lat: 38.7268, lon: -77.5215, searchRadius: 80 },
-            // 34L - south end of WEST runway (near A5 intersection)
-            '34L': { lat: 38.7155, lon: -77.5135, searchRadius: 150 }
+            // 34L - south end of WEST runway (near where taxiway meets runway south end)
+            '34L': { lat: 38.7152, lon: -77.5126, searchRadius: 200 }
         };
 
         const holdArea = holdShortAreas[runwayId];
@@ -473,11 +473,11 @@ export class GraphManager {
             // 16L entry - north end of EAST runway threshold
             '16L': { lat: 38.7285, lon: -77.5210, searchRadius: 100 },
             // 34R entry - south end of EAST runway (graph node: -77.508112,38.712879)
-            '34R': { lat: 38.7129, lon: -77.5081, searchRadius: 100 },
+            '34R': { lat: 38.7129, lon: -77.5081, searchRadius: 200 },
             // 16R entry - north end of WEST runway (graph node: -77.521016,38.726647)
             '16R': { lat: 38.7266, lon: -77.5210, searchRadius: 100 },
-            // 34L entry - south end of WEST runway  
-            '34L': { lat: 38.7155, lon: -77.5128, searchRadius: 150 }
+            // 34L entry - south end of WEST runway (near geometry end: 38.7152,-77.5126)
+            '34L': { lat: 38.7152, lon: -77.5126, searchRadius: 200 }
         };
 
         const entryPoint = runwayEntryPoints[runwayId];
