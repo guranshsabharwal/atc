@@ -12,9 +12,9 @@ export async function GET(
 
         // Securely map dataset names to file paths to prevent arbitrary file access
         if (dataset === 'osm') {
-            filePath = path.join(process.cwd(), '../../data/raw/osm/khef.geojson');
+            filePath = path.join(process.cwd(), 'public/data/khef.geojson');
         } else if (dataset === 'graph') {
-            filePath = path.join(process.cwd(), '../../data/derived/khef/graph_debug.geojson');
+            filePath = path.join(process.cwd(), 'public/data/graph_debug.geojson');
         } else {
             return NextResponse.json({ error: 'Dataset not found' }, { status: 404 });
         }

@@ -11,6 +11,7 @@
         "test:e2e": "playwright test"
     },
     "dependencies": {
+        "@atc/engine": "workspace:*",
         "@atc/shared": "workspace:*",
         "@radix-ui/react-slot": "^1.2.4",
         "@turf/turf": "^7.3.1",

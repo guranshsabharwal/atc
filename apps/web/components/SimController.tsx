@@ -21,6 +21,7 @@ interface SimControllerProps {
     onAltitude?: (aircraftId: string, altitude: number, isClimb: boolean) => void;
     onSpeed?: (aircraftId: string, speed: number) => void;
     onHandoff?: (aircraftId: string, toController: ControllerPosition) => void;
+    onReset?: () => void;
 }
 
 export default function SimController({
@@ -35,7 +36,8 @@ export default function SimController({
     onVector,
     onAltitude,
     onSpeed,
-    onHandoff
+    onHandoff,
+    onReset,
 }: SimControllerProps) {
     const [callsign, setCallsign] = useState("UAL123");
     const [selectedGate, setSelectedGate] = useState(KHEF_GATES[0].id);
@@ -57,8 +59,19 @@ export default function SimController({
             <div className="flex items-center justify-between p-3 border rounded-lg bg-background/50 text-card-foreground shadow-sm">
                 <span className="text-sm font-medium">System Status</span>
                 <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
-                    <span className="text-xs text-muted-foreground">{connected ? "Online" : "Offline"}</span>
+                    <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-amber-500 animate-pulse"}`} />
+                    <span className="text-xs text-muted-foreground">{connected ? "Online" : "Loading…"}</span>
+                    {onReset && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[10px] px-2 border-dashed"
+                            onClick={onReset}
+                            title="Clear all aircraft and reset simulation state"
+                        >
+                            Reset
+                        </Button>
+                    )}
                 </div>
             </div>
 

@@ -1,51 +1,73 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { WorldState, WorldStateSchema } from '@atc/shared';
+import { WorldState } from '@atc/shared';
+import { Simulation, GroundGraph } from '@atc/engine';
+
+type SimStatus = 'loading' | 'ready' | 'error';
 
 export function useSimulation() {
-    const [isConnected, setIsConnected] = useState(false);
-    const [worldState, setWorldState] = useState<WorldState>({ aircraft: [], timestamp: 0 });
-    const ws = useRef<WebSocket | null>(null);
+    const [status, setStatus] = useState<SimStatus>('loading');
+    const [worldState, setWorldState] = useState<WorldState>({ aircraft: [], runways: [], timestamp: 0 });
+    const simRef = useRef<Simulation | null>(null);
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const graphDataRef = useRef<GroundGraph | null>(null);
+
+    const startTickLoop = useCallback((sim: Simulation) => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        const TICK_RATE = 100;
+        intervalRef.current = setInterval(() => {
+            sim.tick(TICK_RATE / 1000);
+            setWorldState({ ...sim.getState() });
+        }, TICK_RATE);
+    }, []);
+
+    const initSim = useCallback(async () => {
+        setStatus('loading');
+        try {
+            let graphData = graphDataRef.current;
+            if (!graphData) {
+                const res = await fetch('/data/graph.json');
+                if (!res.ok) throw new Error(`Failed to fetch graph.json: ${res.status}`);
+                graphData = await res.json() as GroundGraph;
+                graphDataRef.current = graphData;
+            }
+
+            if (intervalRef.current) clearInterval(intervalRef.current);
+
+            const sim = new Simulation(graphData);
+            simRef.current = sim;
+            setWorldState({ ...sim.getState() });
+            startTickLoop(sim);
+            setStatus('ready');
+        } catch (e) {
+            console.error('[useSimulation] Failed to initialize simulation:', e);
+            setStatus('error');
+        }
+    }, [startTickLoop]);
 
     useEffect(() => {
-        // Determine WS URL (assume localhost:3002 for now from previous SimController)
-        const socket = new WebSocket('ws://localhost:3002');
-        ws.current = socket;
-
-        socket.onopen = () => setIsConnected(true);
-        socket.onclose = () => setIsConnected(false);
-
-        socket.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-
-                // Server sends { type: 'state', payload: WorldState }
-                if (data.type === 'state') {
-                    const result = WorldStateSchema.safeParse(data.payload);
-                    if (result.success) {
-                        setWorldState(result.data);
-                    } else {
-                        console.warn('Invalid world state payload:', result.error);
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to parse WS message', e);
-            }
-        };
-
+        initSim();
         return () => {
-            socket.close();
+            if (intervalRef.current) clearInterval(intervalRef.current);
         };
+    }, [initSim]);
+
+    const sendCommand = useCallback((type: string, payload: unknown) => {
+        if (!simRef.current) {
+            console.warn('[useSimulation] Simulation not ready, dropping command:', type);
+            return;
+        }
+        simRef.current.handleCommand({ type, payload } as Parameters<Simulation['handleCommand']>[0]);
     }, []);
 
-    const sendCommand = useCallback((type: string, payload: any) => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({ type, payload }));
-        }
-    }, []);
+    const reset = useCallback(() => {
+        initSim();
+    }, [initSim]);
 
     return {
-        isConnected,
+        isConnected: status === 'ready',
+        isLoading: status === 'loading',
         worldState,
-        sendCommand
+        sendCommand,
+        reset,
     };
 }

@@ -23,6 +23,9 @@ importers:
       '@atc/database':
         specifier: workspace:^
         version: link:../../packages/database
+      '@atc/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@atc/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -54,6 +57,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@atc/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@atc/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -180,6 +186,16 @@ importers:
       tsx:
         specifier: ^4.0.0
         version: 4.21.0
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
+  packages/engine:
+    dependencies:
+      '@atc/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
       typescript:
         specifier: ^5.0.0
         version: 5.9.3

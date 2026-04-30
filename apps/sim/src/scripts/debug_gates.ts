@@ -1,9 +1,13 @@
 
-import { GraphManager } from '../core/GraphManager';
-import { RunwayManager } from '../core/RunwayManager';
+import fs from 'fs';
+import path from 'path';
+import { GraphManager, RunwayManager, GroundGraph } from '@atc/engine';
 import { KHEF_GATES } from '@atc/shared';
 
-const graph = new GraphManager();
+const graphPath = path.resolve(__dirname, '../../../../data/derived/khef/graph.json');
+const graphData: GroundGraph = JSON.parse(fs.readFileSync(graphPath, 'utf-8'));
+
+const graph = new GraphManager(graphData);
 const runwayManager = new RunwayManager();
 
 console.log('--- Checking Gate Connectivity ---');

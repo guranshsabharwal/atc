@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ControllerPosition } from "@atc/shared";
 
 export default function Home() {
-    const { isConnected, worldState, sendCommand } = useSimulation();
+    const { isConnected, worldState, sendCommand, reset } = useSimulation();
     const [scopeMode, setScopeMode] = useState<'ground' | 'radar'>('ground');
     const [resizeKey, setResizeKey] = useState(0);
 
@@ -94,7 +94,7 @@ export default function Home() {
                     <aside className="h-full flex flex-col overflow-y-auto bg-card shadow-xl">
                         <div className="p-4 border-b">
                             <h1 className="text-xl font-bold tracking-tight">KHEF Trainer</h1>
-                            <p className="text-xs text-muted-foreground">Server Authoritative Sim</p>
+                            <p className="text-xs text-muted-foreground">KHEF · In-Browser Demo</p>
                         </div>
 
                         <div className="p-4 flex-1 overflow-y-auto">
@@ -111,6 +111,7 @@ export default function Home() {
                                 onAltitude={handleAltitude}
                                 onSpeed={handleSpeed}
                                 onHandoff={handleHandoff}
+                                onReset={reset}
                             />
                         </div>
                     </aside>

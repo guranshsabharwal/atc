@@ -9,6 +9,7 @@
     },
     "dependencies": {
         "@atc/database": "workspace:^",
+        "@atc/engine": "workspace:*",
         "@atc/shared": "workspace:*",
         "fastify": "^4.20.0",
         "ws": "^8.13.0",
