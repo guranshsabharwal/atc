@@ -9,11 +9,12 @@ interface AirportMapProps {
     worldState: WorldState | null;
     showLayerToggles?: boolean;                                // hide debug toggles in demo mode
     onAssignRunway?: (aircraftId: string, runwayId: string) => void; // HUMAN-mode click action
+    onHoldAircraft?: (aircraftId: string, hold: boolean) => void;    // manual Stop/Resume
 }
 
 const RUNWAY_OPTIONS = ['16L', '16R', '34L', '34R'];
 
-export default function AirportMap({ worldState, showLayerToggles = false, onAssignRunway }: AirportMapProps) {
+export default function AirportMap({ worldState, showLayerToggles = false, onAssignRunway, onHoldAircraft }: AirportMapProps) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<maplibregl.Map | null>(null);
     const [loaded, setLoaded] = useState(false);
@@ -22,8 +23,10 @@ export default function AirportMap({ worldState, showLayerToggles = false, onAss
     // Mode + assigner refs so map click handlers stay correct across re-renders.
     const worldStateRef = useRef<WorldState | null>(worldState);
     const onAssignRunwayRef = useRef(onAssignRunway);
+    const onHoldAircraftRef = useRef(onHoldAircraft);
     useEffect(() => { worldStateRef.current = worldState; }, [worldState]);
     useEffect(() => { onAssignRunwayRef.current = onAssignRunway; }, [onAssignRunway]);
+    useEffect(() => { onHoldAircraftRef.current = onHoldAircraft; }, [onHoldAircraft]);
 
     // Visibility States
     const [showGraph, setShowGraph] = useState(false);
@@ -332,10 +335,34 @@ export default function AirportMap({ worldState, showLayerToggles = false, onAss
                     const sub = document.createElement('div');
                     sub.style.fontSize = '11px';
                     sub.style.color = '#6b7280';
+                    sub.style.marginBottom = '6px';
                     sub.textContent = ac?.clearance?.type
-                        ? `Status: ${ac.clearance.type}`
+                        ? `Status: ${ac.clearance.type}${ac.manualHold ? ' (HELD)' : ''}`
                         : `ID: ${id}`;
                     root.appendChild(sub);
+                }
+
+                // Hold / Resume button — available any time, in either mode.
+                if (onHoldAircraftRef.current && ac) {
+                    const isHeld = !!ac.manualHold;
+                    const holdBtn = document.createElement('button');
+                    holdBtn.textContent = isHeld ? 'Resume' : 'Stop';
+                    holdBtn.style.marginTop = '8px';
+                    holdBtn.style.width = '100%';
+                    holdBtn.style.padding = '6px 10px';
+                    holdBtn.style.fontSize = '13px';
+                    holdBtn.style.fontWeight = '600';
+                    holdBtn.style.borderRadius = '6px';
+                    holdBtn.style.border = '1px solid';
+                    holdBtn.style.borderColor = isHeld ? '#10b981' : '#ef4444';
+                    holdBtn.style.background = isHeld ? '#d1fae5' : '#fee2e2';
+                    holdBtn.style.color = isHeld ? '#065f46' : '#991b1b';
+                    holdBtn.style.cursor = 'pointer';
+                    holdBtn.addEventListener('click', () => {
+                        onHoldAircraftRef.current?.(id, !isHeld);
+                        popupRef.current?.remove();
+                    });
+                    root.appendChild(holdBtn);
                 }
 
                 popupRef.current = new maplibregl.Popup({ closeOnClick: true })
@@ -391,6 +418,7 @@ export default function AirportMap({ worldState, showLayerToggles = false, onAss
         const mode = worldState.mode ?? 'AI';
 
         const colorFor = (ac: Aircraft): string => {
+            if (ac.manualHold) return '#3b82f6';       // blue: operator-held
             if (ac.inConflictStop) return '#ef4444';   // red
             if (ac.isRerouting) return '#a855f7';      // purple
             if (mode === 'AI') return '#10b981';       // emerald

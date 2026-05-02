@@ -14,6 +14,7 @@ import {
     HandoffCommand,
     SetModeCommand,
     AssignRunwayCommand,
+    HoldAircraftCommand,
     Aircraft,
     Metrics,
     OperatingMode,
@@ -36,7 +37,9 @@ const NEAR_MISS_METERS = 50;
 // Snap-block distance: if another aircraft is already this close to the next
 // graph node, the trailing aircraft won't snap onto it (real queue formation).
 const NODE_OCCUPIED_METERS = 30;
-const MIN_SEPARATION_SECONDS = 60;
+// Demo cadence: real ATC uses ~60–120 s between same-runway departures, but
+// for a science fair demo 30 s keeps the run snappy without looking unsafe.
+const MIN_SEPARATION_SECONDS = 30;
 // Patient stop-and-wait window: how long an AI aircraft holds in a near-miss
 // before attempting a reroute. Real ATC behavior: stop, let the leader pass,
 // then either resume or be redirected. With dispatch throttling below, this
@@ -143,7 +146,16 @@ export class Simulation {
             this.handleResetScenario();
         } else if (cmd.type === 'assignRunway') {
             this.handleAssignRunway(cmd as AssignRunwayCommand);
+        } else if (cmd.type === 'holdAircraft') {
+            this.handleHoldAircraft(cmd as HoldAircraftCommand);
         }
+    }
+
+    private handleHoldAircraft(cmd: HoldAircraftCommand) {
+        const ac = this.state.aircraft.find(a => a.id === cmd.payload.aircraftId);
+        if (!ac) return;
+        ac.manualHold = cmd.payload.hold;
+        if (cmd.payload.hold) ac.speed = 0;
     }
 
     private handleSetMode(cmd: SetModeCommand) {
@@ -484,6 +496,7 @@ export class Simulation {
         // Sequence aircraft already in the taxi/hold pipeline through line-up + takeoff.
         for (const ac of this.state.aircraft) {
             if (ac.flightPhase && ac.flightPhase !== 'GROUND') continue;
+            if (ac.manualHold) continue; // operator-held: do nothing
             const cooldown = this.aiActionCooldown.get(ac.id) ?? 0;
             if (this.state.timestamp < cooldown) continue;
             const c = ac.clearance?.type;
@@ -518,6 +531,7 @@ export class Simulation {
         // chose and the lack of collision avoidance during taxi.
         for (const ac of this.state.aircraft) {
             if (ac.flightPhase && ac.flightPhase !== 'GROUND') continue;
+            if (ac.manualHold) continue; // operator-held: do nothing
             const cooldown = this.aiActionCooldown.get(ac.id) ?? 0;
             if (this.state.timestamp < cooldown) continue;
             const c = ac.clearance?.type;
@@ -889,6 +903,11 @@ export class Simulation {
             ac.speed = Math.min(ac.speed + 5, 140);
         } else if (ac.clearance?.type === 'LAND') {
             ac.speed = Math.max(ac.speed - 2, 20);
+        }
+
+        // Operator-issued hold (HUMAN mode Stop button or manual override).
+        if (ac.manualHold) {
+            return { ...ac, speed: 0 };
         }
 
         // Conflict halt: detectNearMisses() already set inConflictStop and zeroed speed.

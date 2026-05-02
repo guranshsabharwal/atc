@@ -138,12 +138,12 @@ export default function DemoControls({
             {/* Hint banner */}
             {running && mode === "HUMAN" && !completed && (
                 <div className="pointer-events-auto rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 px-4 py-2 text-sm text-amber-900 dark:text-amber-200 shadow">
-                    Click each aircraft on the map and pick a runway from the popup.
+                    Click each aircraft to pick a runway, or use Stop to hold it in place.
                 </div>
             )}
             {running && mode === "AI" && !completed && (
                 <div className="pointer-events-auto rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 px-4 py-2 text-sm text-emerald-900 dark:text-emerald-200 shadow">
-                    AI is taxiing all aircraft and rerouting around conflicts.
+                    AI is queueing aircraft on a 4 s spacing — click any plane to Stop or override.
                 </div>
             )}
 

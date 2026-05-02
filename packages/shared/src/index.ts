@@ -114,6 +114,7 @@ export const AircraftSchema = z.object({
     isRerouting: z.boolean().optional(),      // true for one tick when AI rerouted this aircraft
     inConflictStop: z.boolean().optional(),   // true while held by 50m proximity check
     conflictHeldSince: z.number().optional(), // ms timestamp of when the current halt began
+    manualHold: z.boolean().optional(),       // operator-issued hold (HUMAN/Demo manual stop)
 });
 
 export const WorldStateSchema = z.object({
@@ -247,6 +248,16 @@ export const AssignRunwayCommandSchema = z.object({
     }),
 });
 
+// Operator-issued hold/release toggle: lets the HUMAN-mode controller (or AI
+// mode safety override) freeze an aircraft in place.
+export const HoldAircraftCommandSchema = z.object({
+    type: z.literal('holdAircraft'),
+    payload: z.object({
+        aircraftId: z.string(),
+        hold: z.boolean(),
+    }),
+});
+
 export const CommandSchema = z.discriminatedUnion('type', [
     SpawnAircraftCommandSchema,
     IssueTaxiClearanceCommandSchema,
@@ -265,6 +276,7 @@ export const CommandSchema = z.discriminatedUnion('type', [
     StartScenarioCommandSchema,
     ResetScenarioCommandSchema,
     AssignRunwayCommandSchema,
+    HoldAircraftCommandSchema,
 ]);
 
 // TypeScript Types
@@ -297,6 +309,7 @@ export type SetModeCommand = z.infer<typeof SetModeCommandSchema>;
 export type StartScenarioCommand = z.infer<typeof StartScenarioCommandSchema>;
 export type ResetScenarioCommand = z.infer<typeof ResetScenarioCommandSchema>;
 export type AssignRunwayCommand = z.infer<typeof AssignRunwayCommandSchema>;
+export type HoldAircraftCommand = z.infer<typeof HoldAircraftCommandSchema>;
 export type OperatingMode = z.infer<typeof OperatingModeSchema>;
 export type Metrics = z.infer<typeof MetricsSchema>;
 export type RunwayConfig = z.infer<typeof RunwayConfigSchema>;

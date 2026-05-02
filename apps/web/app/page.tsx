@@ -43,6 +43,11 @@ export default function Home() {
             sendCommand("assignRunway", { aircraftId, runwayId }),
         [sendCommand]
     );
+    const handleHoldAircraft = useCallback(
+        (aircraftId: string, hold: boolean) =>
+            sendCommand("holdAircraft", { aircraftId, hold }),
+        [sendCommand]
+    );
 
     return (
         <main className="relative h-screen w-full overflow-hidden bg-background">
@@ -53,6 +58,7 @@ export default function Home() {
                         worldState={worldState}
                         showLayerToggles={advancedOpen}
                         onAssignRunway={handleAssignRunway}
+                        onHoldAircraft={handleHoldAircraft}
                     />
                 ) : (
                     <RadarScope worldState={worldState} />
