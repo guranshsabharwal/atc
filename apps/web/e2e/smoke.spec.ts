@@ -7,22 +7,16 @@ test('has title', async ({ page }) => {
     await expect(page).toHaveTitle(/ATC Simulation/);
 });
 
-test('shows connected status', async ({ page }) => {
+test('shows demo controls and map', async ({ page }) => {
     await page.goto('/');
 
-    // Should eventually show connected (using regex or exact match depending on UI updates)
-    // Our UI shows "Disconnected" initially, then "Connected".
-    // This test might fail if Sim server isn't running in background during test.
-    // The playwright webServer config runs 'pnpm dev' which runs both currently?
-    // Our 'pnpm dev' in root runs 'turbo run dev'.
-    // Our web/playwright.config.ts webServer command is 'pnpm dev' (in apps/web).
-    // 'apps/web' pnpm dev only runs next dev. It doesn't run the sim server.
-    // So 'Connected' verification will fail unless we start sim server too.
-    // For smoke test, valid title is enough.
-    // Let's stick to title for now to be safe, or assert "System Status" exists.
+    // The KHEF demo overlay renders the mode toggle, Start Demo button, and KPI strip.
+    await expect(page.getByRole('button', { name: 'HUMAN' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'AI' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Start Demo|Run Again/ })).toBeVisible();
+    await expect(page.getByText('Departed')).toBeVisible();
+    await expect(page.getByText('Near-misses')).toBeVisible();
 
-    await expect(page.getByText('System Status')).toBeVisible();
-
-    // Verify Map is present
+    // Map renders
     await expect(page.locator('.maplibregl-map')).toBeVisible();
 });

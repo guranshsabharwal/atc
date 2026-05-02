@@ -3,20 +3,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { WorldState, Aircraft } from '@atc/shared';
+import { WorldState, Aircraft, KHEF_RUNWAY_CONFIGS } from '@atc/shared';
 
 interface AirportMapProps {
     worldState: WorldState | null;
+    showLayerToggles?: boolean;                                // hide debug toggles in demo mode
+    onAssignRunway?: (aircraftId: string, runwayId: string) => void; // HUMAN-mode click action
 }
 
-export default function AirportMap({ worldState }: AirportMapProps) {
+const RUNWAY_OPTIONS = ['16L', '16R', '34L', '34R'];
+
+export default function AirportMap({ worldState, showLayerToggles = false, onAssignRunway }: AirportMapProps) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<maplibregl.Map | null>(null);
     const [loaded, setLoaded] = useState(false);
     const popupRef = useRef<maplibregl.Popup | null>(null);
 
+    // Mode + assigner refs so map click handlers stay correct across re-renders.
+    const worldStateRef = useRef<WorldState | null>(worldState);
+    const onAssignRunwayRef = useRef(onAssignRunway);
+    useEffect(() => { worldStateRef.current = worldState; }, [worldState]);
+    useEffect(() => { onAssignRunwayRef.current = onAssignRunway; }, [onAssignRunway]);
+
     // Visibility States
-    const [showGraph, setShowGraph] = useState(true);
+    const [showGraph, setShowGraph] = useState(false);
     const [showLabels, setShowLabels] = useState(true);
     const [showLayout, setShowLayout] = useState(true);
 
@@ -180,20 +190,33 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                 }
             });
 
-            // Aircraft Layer
+            // Aircraft halo (only visible for aircraft awaiting assignment in HUMAN mode)
             map.current?.addLayer({
-                id: 'aircraft-layer',
-                type: 'circle', // Fallback if no icon
+                id: 'aircraft-halo-layer',
+                type: 'circle',
                 source: 'aircraft-source',
                 paint: {
-                    'circle-radius': 6,
-                    'circle-color': 'red',
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': 'white'
+                    'circle-radius': 11,
+                    'circle-color': '#f59e0b',
+                    'circle-opacity': ['case', ['==', ['get', 'needsAssign'], 1], 0.35, 0],
+                    'circle-stroke-width': 0
                 }
             });
 
-            // Aircraft Path Layer (Magenta line)
+            // Aircraft Layer (colored per feature) — small and clean
+            map.current?.addLayer({
+                id: 'aircraft-layer',
+                type: 'circle',
+                source: 'aircraft-source',
+                paint: {
+                    'circle-radius': 5,
+                    'circle-color': ['get', 'color'],
+                    'circle-stroke-width': 1.5,
+                    'circle-stroke-color': '#ffffff'
+                }
+            });
+
+            // Aircraft Path Layer (per-aircraft color set on the feature)
             map.current?.addLayer({
                 id: 'aircraft-path-layer',
                 type: 'line',
@@ -204,51 +227,122 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                     visibility: 'visible'
                 },
                 paint: {
-                    'line-color': '#ff00ff', // Magenta
+                    'line-color': ['get', 'color'],
                     'line-width': 3,
-                    'line-opacity': 0.7,
+                    'line-opacity': 0.85,
                     'line-dasharray': [2, 1] // Dashed
                 }
             });
 
-            // Add Label for Aircraft
+            // Add Label for Aircraft. Per-feature label offset so when two
+            // aircraft are at very nearby points the labels don't sit on top of
+            // each other.
             map.current?.addLayer({
                 id: 'aircraft-label-layer',
                 type: 'symbol',
                 source: 'aircraft-source',
                 layout: {
                     'text-field': ['get', 'callsign'],
-                    'text-size': 12,
-                    'text-offset': [0, -1.5],
+                    'text-size': 11,
+                    'text-offset': ['get', 'labelOffset'],
                     'text-anchor': 'bottom',
                     'text-font': ['Open Sans Bold'],
                     'text-allow-overlap': true,
-                    'text-ignore-placement': true
+                    'text-ignore-placement': true,
                 },
                 paint: {
                     'text-color': '#000',
                     'text-halo-color': '#fff',
-                    'text-halo-width': 2
-                }
+                    'text-halo-width': 2,
+                },
             });
 
             // Click Handler for Selection
             map.current?.on('click', 'aircraft-layer', (e) => {
                 if (!e.features || e.features.length === 0) return;
                 const feature = e.features[0];
-                const { callsign, id } = feature.properties || {};
+                const { callsign, id, suggestedRunwayId } = (feature.properties as Record<string, string>) || {};
                 const geometry = feature.geometry as any;
                 const coordinates = geometry.coordinates.slice();
 
-                // Show Popup
                 if (popupRef.current) popupRef.current.remove();
 
-                popupRef.current = new maplibregl.Popup()
+                const ws = worldStateRef.current;
+                const ac = ws?.aircraft.find(a => a.id === id);
+                const isHuman = ws?.mode === 'HUMAN';
+                const isUnassigned = !ac?.clearance || ac.clearance.type === 'NONE';
+                const showAssign = isHuman && isUnassigned && !!onAssignRunwayRef.current;
+
+                const root = document.createElement('div');
+                root.style.minWidth = '180px';
+
+                if (showAssign) {
+                    const heading = document.createElement('div');
+                    heading.style.fontWeight = '700';
+                    heading.style.marginBottom = '6px';
+                    heading.textContent = `${callsign} — pick runway`;
+                    root.appendChild(heading);
+
+                    const grid = document.createElement('div');
+                    grid.style.display = 'grid';
+                    grid.style.gridTemplateColumns = '1fr 1fr';
+                    grid.style.gap = '4px';
+
+                    const suggested = suggestedRunwayId;
+                    const config = ws?.activeConfig ?? '16';
+                    const activeSet = new Set(KHEF_RUNWAY_CONFIGS[config].active);
+                    for (const rwy of RUNWAY_OPTIONS) {
+                        const isActive = activeSet.has(rwy);
+                        const btn = document.createElement('button');
+                        btn.textContent = rwy + (rwy === suggested ? ' ★' : '');
+                        btn.style.padding = '6px 8px';
+                        btn.style.fontSize = '13px';
+                        btn.style.fontWeight = rwy === suggested ? '700' : '500';
+                        btn.style.borderRadius = '6px';
+                        btn.style.border = '1px solid #d1d5db';
+                        btn.style.background = !isActive
+                            ? '#e5e7eb'
+                            : (rwy === suggested ? '#fde68a' : '#f3f4f6');
+                        btn.style.color = !isActive ? '#9ca3af' : '#000000';
+                        btn.style.cursor = isActive ? 'pointer' : 'not-allowed';
+                        if (!isActive) {
+                            btn.disabled = true;
+                            btn.title = 'Inactive — wrong wind direction';
+                        } else {
+                            btn.addEventListener('click', () => {
+                                onAssignRunwayRef.current?.(id, rwy);
+                                popupRef.current?.remove();
+                            });
+                        }
+                        grid.appendChild(btn);
+                    }
+                    root.appendChild(grid);
+
+                    const note = document.createElement('div');
+                    note.style.marginTop = '6px';
+                    note.style.fontSize = '11px';
+                    note.style.color = '#6b7280';
+                    note.textContent = `★ default · grayed runways inactive (${config}-flow)`;
+                    root.appendChild(note);
+                } else {
+                    const heading = document.createElement('div');
+                    heading.style.fontWeight = '700';
+                    heading.textContent = String(callsign);
+                    root.appendChild(heading);
+                    const sub = document.createElement('div');
+                    sub.style.fontSize = '11px';
+                    sub.style.color = '#6b7280';
+                    sub.textContent = ac?.clearance?.type
+                        ? `Status: ${ac.clearance.type}`
+                        : `ID: ${id}`;
+                    root.appendChild(sub);
+                }
+
+                popupRef.current = new maplibregl.Popup({ closeOnClick: true })
                     .setLngLat(coordinates)
-                    .setHTML(`<strong>${callsign}</strong><br>ID: ${id}`)
+                    .setDOMContent(root)
                     .addTo(map.current!);
 
-                // Stop propagation to map click
                 e.originalEvent.stopPropagation();
             });
 
@@ -294,10 +388,44 @@ export default function AirportMap({ worldState }: AirportMapProps) {
     useEffect(() => {
         if (!map.current || !loaded || !worldState) return;
 
+        const mode = worldState.mode ?? 'AI';
+
+        const colorFor = (ac: Aircraft): string => {
+            if (ac.inConflictStop) return '#ef4444';   // red
+            if (ac.isRerouting) return '#a855f7';      // purple
+            if (mode === 'AI') return '#10b981';       // emerald
+            return '#f59e0b';                           // amber for HUMAN
+        };
+
+        // Compute per-aircraft label offsets: when aircraft sit within ~50 m of
+        // each other (e.g., queued at a hold-short) we vertically stagger their
+        // callsign labels so they don't pile up. 50 m ≈ 0.00045° at this lat.
+        const NEAR_DEG = 0.00045;
+        const aircraftList = worldState.aircraft || [];
+        const labelOffsets = new Map<string, [number, number]>();
+        // Sort by id so the slot assignment is stable across ticks.
+        const sorted = [...aircraftList].sort((a, b) => a.id.localeCompare(b.id));
+        for (const ac of sorted) {
+            // Slot = number of already-placed aircraft within NEAR_DEG of this one.
+            let slot = 0;
+            labelOffsets.forEach((_, otherId) => {
+                const other = aircraftList.find(o => o.id === otherId);
+                if (!other) return;
+                const dlat = ac.position.lat - other.position.lat;
+                const dlon = ac.position.lon - other.position.lon;
+                if (Math.sqrt(dlat * dlat + dlon * dlon) < NEAR_DEG) slot += 1;
+            });
+            // Slot 0: above. Slot 1: below. Slot 2: further above. Slot 3: further below.
+            const yOff = slot === 0 ? -1.5
+                : slot % 2 === 1 ? 1.6 + Math.floor(slot / 2) * 1.1
+                : -1.5 - Math.floor(slot / 2) * 1.1;
+            labelOffsets.set(ac.id, [0, yOff]);
+        }
+
         // Update Aircraft Points
         const source = map.current.getSource('aircraft-source') as maplibregl.GeoJSONSource;
         if (source) {
-            const features = (worldState.aircraft || []).map(ac => ({
+            const features = aircraftList.map(ac => ({
                 type: 'Feature',
                 geometry: {
                     type: 'Point',
@@ -306,7 +434,11 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                 properties: {
                     callsign: ac.callsign,
                     heading: ac.position.heading,
-                    id: ac.id
+                    id: ac.id,
+                    color: colorFor(ac),
+                    suggestedRunwayId: ac.suggestedRunwayId ?? '',
+                    needsAssign: mode === 'HUMAN' && (!ac.clearance || ac.clearance.type === 'NONE') ? 1 : 0,
+                    labelOffset: labelOffsets.get(ac.id) ?? [0, -1.5],
                 }
             }));
 
@@ -320,11 +452,11 @@ export default function AirportMap({ worldState }: AirportMapProps) {
         const pathSource = map.current.getSource('aircraft-paths') as maplibregl.GeoJSONSource;
         if (pathSource && graphData) {
             const pathFeatures = (worldState.aircraft || [])
-                .filter(ac => ac.route && ac.route.length > 1) // Only show if valid route
+                .filter(ac => ac.route && ac.route.length > 1)
                 .map(ac => {
                     const coords = ac.route!
                         .map(nodeId => graphData[nodeId])
-                        .filter(c => c !== undefined); // valid coords only
+                        .filter(c => c !== undefined);
 
                     if (coords.length < 2) return null;
 
@@ -335,23 +467,17 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                             coordinates: coords
                         },
                         properties: {
-                            callsign: ac.callsign
+                            callsign: ac.callsign,
+                            color: colorFor(ac),
                         }
                     };
                 })
-                .filter(Boolean); // remove nulls
+                .filter(Boolean);
 
-            if (pathFeatures.length > 0) {
-                pathSource.setData({
-                    type: 'FeatureCollection',
-                    features: pathFeatures as any
-                });
-            } else {
-                pathSource.setData({
-                    type: 'FeatureCollection',
-                    features: []
-                });
-            }
+            pathSource.setData({
+                type: 'FeatureCollection',
+                features: (pathFeatures.length > 0 ? pathFeatures : []) as any,
+            });
         }
     }, [worldState, loaded, graphData]);
 
@@ -373,6 +499,30 @@ export default function AirportMap({ worldState }: AirportMapProps) {
 
     }, [loaded, showGraph, showLabels, showLayout]);
 
+    // Dim runway-threshold labels for the inactive wind side (e.g., 34L/34R).
+    useEffect(() => {
+        if (!map.current || !loaded) return;
+        const config = worldState?.activeConfig ?? '16';
+        const activeSet = new Set(KHEF_RUNWAY_CONFIGS[config].active);
+        const thresholdsSource = map.current.getSource('runway-thresholds') as maplibregl.GeoJSONSource | undefined;
+        if (!thresholdsSource) return;
+        thresholdsSource.setData({
+            type: 'FeatureCollection',
+            features: [
+                { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5187, 38.7277] }, properties: { label: '16L', active: activeSet.has('16L') ? 1 : 0 } },
+                { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5081, 38.7129] }, properties: { label: '34R', active: activeSet.has('34R') ? 1 : 0 } },
+                { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5210, 38.7266] }, properties: { label: '16R', active: activeSet.has('16R') ? 1 : 0 } },
+                { type: 'Feature', geometry: { type: 'Point', coordinates: [-77.5147, 38.7178] }, properties: { label: '34L', active: activeSet.has('34L') ? 1 : 0 } },
+            ],
+        });
+        map.current.setPaintProperty('airport-runway-labels', 'text-color', [
+            'case', ['==', ['get', 'active'], 1], '#ffffff', '#9ca3af',
+        ]);
+        map.current.setPaintProperty('airport-runway-labels', 'text-halo-color', [
+            'case', ['==', ['get', 'active'], 1], '#000000', '#374151',
+        ]);
+    }, [loaded, worldState?.activeConfig]);
+
     return (
         <div className="relative w-full h-full overflow-hidden flex flex-col">
             <div ref={mapContainer} className="flex-1 relative" />
@@ -381,21 +531,23 @@ export default function AirportMap({ worldState }: AirportMapProps) {
                     <span className="text-sm font-medium">Loading Map...</span>
                 </div>
             )}
-            <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur p-3 rounded shadow-md z-10 flex flex-col gap-2 text-sm border">
-                <h4 className="font-semibold mb-1">Map Layers</h4>
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={showLayout} onChange={e => setShowLayout(e.target.checked)} className="rounded" />
-                    Airport Layout
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} className="rounded" />
-                    Labels (Runway/Taxi)
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={showGraph} onChange={e => setShowGraph(e.target.checked)} className="rounded" />
-                    Graph Debug (Blue)
-                </label>
-            </div>
+            {showLayerToggles && (
+                <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur p-3 rounded shadow-md z-10 flex flex-col gap-2 text-sm border">
+                    <h4 className="font-semibold mb-1">Map Layers</h4>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={showLayout} onChange={e => setShowLayout(e.target.checked)} className="rounded" />
+                        Airport Layout
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} className="rounded" />
+                        Labels (Runway/Taxi)
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={showGraph} onChange={e => setShowGraph(e.target.checked)} className="rounded" />
+                        Graph Debug (Blue)
+                    </label>
+                </div>
+            )}
         </div>
     );
 }

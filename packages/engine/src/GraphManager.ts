@@ -20,6 +20,8 @@ export interface GroundGraph {
 export class GraphManager {
     private nodes: Map<string, GraphNode> = new Map();
     private adjacency: Map<string, { to: string; distance: number; type?: string; ref?: string }[]> = new Map();
+    // runway designator (e.g., '16L') -> set of node IDs on that runway's centerline
+    private runwayNodes: Map<string, Set<string>> = new Map();
 
     private readonly GATE_START_NODES: Record<string, string> = {
         'TERMINAL': '-77.511210,38.723789',
@@ -45,8 +47,25 @@ export class GraphManager {
             }
         });
 
+        // Index runway-centerline nodes per runway designator. Runway edges have a
+        // ref like '16L/34R' — both endpoints belong to BOTH '16L' and '34R'.
+        for (const edge of graph.edges) {
+            if (edge.type !== 'runway' || !edge.ref) continue;
+            for (const designator of edge.ref.split('/')) {
+                if (!this.runwayNodes.has(designator)) this.runwayNodes.set(designator, new Set());
+                const set = this.runwayNodes.get(designator)!;
+                if (this.nodes.has(edge.from)) set.add(edge.from);
+                if (this.nodes.has(edge.to)) set.add(edge.to);
+            }
+        }
+
         console.log(`[GraphManager] Loaded ${this.nodes.size} nodes and ${graph.edges.length} edges.`);
         this.repairGraphConnectivity();
+    }
+
+    /** All graph nodes that lie on the named runway's centerline. */
+    public getRunwayCenterlineNodes(runwayId: string): Set<string> {
+        return this.runwayNodes.get(runwayId) ?? new Set();
     }
 
     private repairGraphConnectivity() {
@@ -184,22 +203,47 @@ export class GraphManager {
         return Array.from(visited);
     }
 
-    public findPath(startId: string, endId: string, options?: { allowRunways?: boolean }): string[] | null {
+    public findPath(
+        startId: string,
+        endId: string,
+        options?: { allowRunways?: boolean; avoidNodes?: Set<string> }
+    ): string[] | null {
         if (!this.nodes.has(startId) || !this.nodes.has(endId)) {
             console.warn(`[GraphManager] Start or End node not found.`);
             return null;
         }
 
-        const aStarPath = this.runAStar(startId, endId, options);
+        const aStarPath = this.runAStar(startId, endId, options, options?.avoidNodes);
         if (aStarPath) {
             return aStarPath;
         }
 
+        // BFS fallback respects allowRunways but ignores soft-avoid (it's last resort).
         console.warn(`[GraphManager] A* failed, falling back to BFS.`);
         return this.runBFS(startId, endId, options);
     }
 
-    private runAStar(startId: string, endId: string, options?: { allowRunways?: boolean }): string[] | null {
+    /**
+     * A* path that strongly prefers to avoid the given node IDs (e.g. another aircraft's
+     * upcoming route segment). Avoided nodes are still passable as a last resort so a
+     * route is always returned when topologically possible.
+     */
+    public findPathAvoiding(
+        startId: string,
+        endId: string,
+        avoid: Set<string>,
+        options?: { allowRunways?: boolean }
+    ): string[] | null {
+        if (!this.nodes.has(startId) || !this.nodes.has(endId)) return null;
+        return this.runAStar(startId, endId, options, avoid);
+    }
+
+    private runAStar(
+        startId: string,
+        endId: string,
+        options?: { allowRunways?: boolean },
+        avoid?: Set<string>
+    ): string[] | null {
         const openSet: string[] = [startId];
         const cameFrom: Map<string, string> = new Map();
         const gScore: Map<string, number> = new Map();
@@ -239,7 +283,11 @@ export class GraphManager {
                 if (closedSet.has(neighbor.to)) continue;
                 if (options?.allowRunways === false && neighbor.type === 'runway') continue;
 
-                const dist = (neighbor.distance && neighbor.distance > 0) ? neighbor.distance : 1;
+                const baseDist = (neighbor.distance && neighbor.distance > 0) ? neighbor.distance : 1;
+                // Heavy penalty for avoided nodes makes A* route around them unless
+                // there is no alternative at all.
+                const penalty = avoid && avoid.has(neighbor.to) ? 10000 : 0;
+                const dist = baseDist + penalty;
                 const currentG = gScore.get(current) ?? Infinity;
                 const tentativeGScore = currentG + dist;
                 const neighborG = gScore.get(neighbor.to) ?? Infinity;
@@ -294,6 +342,10 @@ export class GraphManager {
         return totalPath;
     }
 
+    public haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        return this.haversine(lat1, lon1, lat2, lon2);
+    }
+
     private haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
         const R = 6371e3;
         const φ1 = lat1 * Math.PI / 180;
@@ -311,11 +363,15 @@ export class GraphManager {
     }
 
     public getHoldShortNodeForRunway(runwayId: string): string | null {
+        // Search near each runway threshold for the closest TAXIWAY node (a node
+        // whose adjacency includes at least one non-runway edge). Coordinates
+        // mirror the AirportMap threshold labels; radius is generous so we
+        // always find a candidate even if our point isn't perfectly aligned.
         const holdShortAreas: Record<string, { lat: number; lon: number; searchRadius: number }> = {
-            '16L': { lat: 38.7277, lon: -77.5185, searchRadius: 100 },
-            '34R': { lat: 38.7133, lon: -77.5074, searchRadius: 200 },
-            '16R': { lat: 38.7268, lon: -77.5215, searchRadius: 80 },
-            '34L': { lat: 38.7152, lon: -77.5126, searchRadius: 200 }
+            '16L': { lat: 38.7277, lon: -77.5187, searchRadius: 300 },
+            '34R': { lat: 38.7129, lon: -77.5081, searchRadius: 300 },
+            '16R': { lat: 38.7266, lon: -77.5210, searchRadius: 300 },
+            '34L': { lat: 38.7178, lon: -77.5147, searchRadius: 300 }
         };
 
         const holdArea = holdShortAreas[runwayId];
@@ -324,26 +380,35 @@ export class GraphManager {
             return null;
         }
 
-        let bestNode: string | null = null;
-        let bestDist = Infinity;
+        let bestTaxi: string | null = null;
+        let bestTaxiDist = Infinity;
+        let bestAny: string | null = null;
+        let bestAnyDist = Infinity;
 
         for (const node of this.nodes.values()) {
             const dist = this.haversine(holdArea.lat, holdArea.lon, node.lat, node.lon);
-            if (dist < holdArea.searchRadius && dist < bestDist) {
-                bestDist = dist;
-                bestNode = node.id;
+            if (dist > holdArea.searchRadius) continue;
+            if (dist < bestAnyDist) {
+                bestAnyDist = dist;
+                bestAny = node.id;
+            }
+            const edges = this.adjacency.get(node.id) || [];
+            const hasTaxi = edges.some(e => e.type !== 'runway');
+            if (hasTaxi && dist < bestTaxiDist) {
+                bestTaxiDist = dist;
+                bestTaxi = node.id;
             }
         }
 
-        return bestNode;
+        return bestTaxi ?? bestAny;
     }
 
     public getRunwayEntryNode(runwayId: string): string | null {
         const runwayEntryPoints: Record<string, { lat: number; lon: number; searchRadius: number }> = {
-            '16L': { lat: 38.7285, lon: -77.5210, searchRadius: 100 },
-            '34R': { lat: 38.7129, lon: -77.5081, searchRadius: 200 },
-            '16R': { lat: 38.7266, lon: -77.5210, searchRadius: 100 },
-            '34L': { lat: 38.7152, lon: -77.5126, searchRadius: 200 }
+            '16L': { lat: 38.7277, lon: -77.5187, searchRadius: 250 },
+            '34R': { lat: 38.7129, lon: -77.5081, searchRadius: 250 },
+            '16R': { lat: 38.7266, lon: -77.5210, searchRadius: 250 },
+            '34L': { lat: 38.7178, lon: -77.5147, searchRadius: 250 }
         };
 
         const entryPoint = runwayEntryPoints[runwayId];

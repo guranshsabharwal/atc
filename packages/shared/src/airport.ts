@@ -57,3 +57,33 @@ export const KHEF_GATES: ParkingGate[] = [
     // Moved Northwest as requested (West of Taxiway A/A1 area)
     { id: 'WEST_RAMP', lat: 38.7235, lon: -77.5208, heading: 90 }
 ];
+
+// Science fair demo scenario: 6 aircraft, fixed gates + suggested runways.
+// Engineered so several routes overlap, making collisions likely without AI help.
+export interface ScenarioAircraft {
+    callsign: string;
+    gateId: string;
+    runwayId: string;       // Suggested takeoff runway (used by AI; default in Human mode)
+    spawnDelaySec: number;  // Seconds after scenario start to spawn this aircraft
+}
+
+// Runway "side" — real airports run all departures off one side based on wind
+// (e.g., south winds = 16-flow, north winds = 34-flow). The demo locks one side
+// active so the AI never reroutes a departure to the opposite-direction runway.
+export type RunwayConfig = '16' | '34';
+
+export const KHEF_RUNWAY_CONFIGS: Record<RunwayConfig, { active: string[]; inactive: string[]; label: string }> = {
+    '16': { active: ['16L', '16R'], inactive: ['34L', '34R'], label: 'South flow (16)' },
+    '34': { active: ['34L', '34R'], inactive: ['16L', '16R'], label: 'North flow (34)' },
+};
+
+export const KHEF_DEMO_SCENARIO: ScenarioAircraft[] = [
+    // All departures use the 16-side (south flow). Three aircraft per active runway,
+    // engineered so several taxi paths overlap on the apron and main taxiway.
+    { callsign: 'AAL101', gateId: 'TERMINAL',   runwayId: '16L', spawnDelaySec: 0 },
+    { callsign: 'DAL202', gateId: 'APP_JET',    runwayId: '16L', spawnDelaySec: 1 },
+    { callsign: 'UAL303', gateId: 'SOUTH_RAMP', runwayId: '16R', spawnDelaySec: 2 },
+    { callsign: 'SWA404', gateId: 'WEST_RAMP',  runwayId: '16R', spawnDelaySec: 3 },
+    { callsign: 'JBU505', gateId: 'TERMINAL',   runwayId: '16R', spawnDelaySec: 4 },
+    { callsign: 'N123FX', gateId: 'APP_JET',    runwayId: '16L', spawnDelaySec: 5 },
+];

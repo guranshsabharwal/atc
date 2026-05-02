@@ -13,6 +13,22 @@ export const PositionSchema = z.object({
 // Phase 6: Controller Positions
 export const ControllerPositionSchema = z.enum(['GROUND', 'TOWER', 'APPROACH', 'DEPARTURE']);
 
+// Demo: which "brain" is driving the simulation
+export const OperatingModeSchema = z.enum(['HUMAN', 'AI']);
+
+// Demo: which runway "side" is active (south-flow uses 16L/16R, north-flow uses 34L/34R)
+export const RunwayConfigSchema = z.enum(['16', '34']);
+
+// Demo: scenario-level metrics shown on the KPI strip
+export const MetricsSchema = z.object({
+    startedAt: z.number().nullable(),       // ms timestamp; null until scenario started
+    completedAt: z.number().nullable(),     // ms timestamp; null until all spawned aircraft departed
+    spawned: z.number(),                    // total aircraft spawned in this run
+    departed: z.number(),                   // aircraft that successfully took off
+    nearMisses: z.number(),                 // unique pair-events under 50 m
+    totalTaxiSeconds: z.number(),           // sum of seconds aircraft spent moving on the ground
+});
+
 // Phase 6: Flight Phases
 export const FlightPhaseSchema = z.enum(['GROUND', 'DEPARTURE', 'CRUISE', 'APPROACH', 'LANDING']);
 
@@ -90,6 +106,14 @@ export const AircraftSchema = z.object({
     verticalRate: z.number().optional(),    // feet/min (+climb, -descent)
     controllerId: ControllerPositionSchema.optional(),
     flightPhase: FlightPhaseSchema.optional(),
+    // Demo fields
+    assignedRunwayId: z.string().optional(),  // Pre-assigned (AI) or operator-picked (HUMAN) runway
+    suggestedRunwayId: z.string().optional(), // Scenario default; surfaced as the popup default in HUMAN mode
+    spawnedAt: z.number().optional(),         // ms timestamp when this aircraft was spawned
+    taxiSeconds: z.number().optional(),       // accumulated seconds spent moving on the ground
+    isRerouting: z.boolean().optional(),      // true for one tick when AI rerouted this aircraft
+    inConflictStop: z.boolean().optional(),   // true while held by 50m proximity check
+    conflictHeldSince: z.number().optional(), // ms timestamp of when the current halt began
 });
 
 export const WorldStateSchema = z.object({
@@ -97,6 +121,10 @@ export const WorldStateSchema = z.object({
     runways: z.array(RunwayStateSchema).optional(), // Optional for backward compat during dev
     alerts: z.array(z.string()).optional(),
     timestamp: z.number(),
+    mode: OperatingModeSchema.optional(),     // 'HUMAN' or 'AI' driving the run
+    metrics: MetricsSchema.optional(),        // KPI strip data
+    scenarioRunning: z.boolean().optional(),  // true once start; false again after Reset
+    activeConfig: RunwayConfigSchema.optional(), // active runway side
 });
 
 export const SpawnAircraftCommandSchema = z.object({
@@ -191,6 +219,34 @@ export const HandoffCommandSchema = z.object({
     }),
 });
 
+// Demo commands
+export const SetModeCommandSchema = z.object({
+    type: z.literal('setMode'),
+    payload: z.object({
+        mode: OperatingModeSchema,
+    }),
+});
+
+export const StartScenarioCommandSchema = z.object({
+    type: z.literal('startScenario'),
+    payload: z.object({}).default({}),
+});
+
+export const ResetScenarioCommandSchema = z.object({
+    type: z.literal('resetScenario'),
+    payload: z.object({}).default({}),
+});
+
+// Used in HUMAN mode: operator clicks an aircraft and assigns it a runway,
+// which triggers the existing taxi clearance flow.
+export const AssignRunwayCommandSchema = z.object({
+    type: z.literal('assignRunway'),
+    payload: z.object({
+        aircraftId: z.string(),
+        runwayId: z.string(),
+    }),
+});
+
 export const CommandSchema = z.discriminatedUnion('type', [
     SpawnAircraftCommandSchema,
     IssueTaxiClearanceCommandSchema,
@@ -204,6 +260,11 @@ export const CommandSchema = z.discriminatedUnion('type', [
     AltitudeCommandSchema,
     SpeedCommandSchema,
     HandoffCommandSchema,
+    // Demo commands
+    SetModeCommandSchema,
+    StartScenarioCommandSchema,
+    ResetScenarioCommandSchema,
+    AssignRunwayCommandSchema,
 ]);
 
 // TypeScript Types
@@ -232,5 +293,18 @@ export type DirectToCommand = z.infer<typeof DirectToCommandSchema>;
 export type AltitudeCommand = z.infer<typeof AltitudeCommandSchema>;
 export type SpeedCommand = z.infer<typeof SpeedCommandSchema>;
 export type HandoffCommand = z.infer<typeof HandoffCommandSchema>;
+export type SetModeCommand = z.infer<typeof SetModeCommandSchema>;
+export type StartScenarioCommand = z.infer<typeof StartScenarioCommandSchema>;
+export type ResetScenarioCommand = z.infer<typeof ResetScenarioCommandSchema>;
+export type AssignRunwayCommand = z.infer<typeof AssignRunwayCommandSchema>;
+export type OperatingMode = z.infer<typeof OperatingModeSchema>;
+export type Metrics = z.infer<typeof MetricsSchema>;
+export type RunwayConfig = z.infer<typeof RunwayConfigSchema>;
 export type Command = z.infer<typeof CommandSchema>;
-export { KHEF_GATES, type ParkingGate } from './airport';
+export {
+    KHEF_GATES,
+    KHEF_DEMO_SCENARIO,
+    KHEF_RUNWAY_CONFIGS,
+    type ParkingGate,
+    type ScenarioAircraft,
+} from './airport';
